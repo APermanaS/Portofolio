@@ -1732,6 +1732,49 @@ address { font-style: normal; }
 
 
 /* ==========================================================================
+   16b. Content states — files that are not uploaded yet ("coming soon")
+   ========================================================================== */
+
+/* CV button when no CV is uploaded: same pill, calm and non-interactive */
+.btn--soon,
+.btn--soon:hover {
+  opacity: 0.55;
+  cursor: default;
+  transform: none;
+}
+
+.btn--light.btn--soon:hover { background: var(--color-white); }
+
+/* Document link placeholder inside the project modal */
+.link-chip--soon {
+  border-style: dashed;
+  color: var(--text-on-light-muted);
+  cursor: default;
+}
+
+.link-chip--soon:hover { background: transparent; border-color: var(--hairline-light); }
+
+.link-chip--soon svg { width: 16px; height: 16px; }
+
+/* Uploaded skill icons (png/webp) keep their own colours; bundled SVGs are inverted */
+.skill-tile__icon img.is-uploaded { filter: none; }
+
+/* Several certificates stack with the same rhythm as the timeline */
+.cert-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.cert-card__media--empty { cursor: default; }
+
+.cert-card__media .placeholder {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+}
+
+
+/* ==========================================================================
    17. Reduced motion — no movement, content always visible
    ========================================================================== */
 @media (prefers-reduced-motion: reduce) {
