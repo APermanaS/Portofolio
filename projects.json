@@ -1,0 +1,92 @@
+[
+  {
+    "id": "pet-butler",
+    "title": "Pet Butler — Pet Transportation Web Application",
+    "category": "code",
+    "category_label": "Code",
+    "period": "March–June 2026",
+    "context": "Academic group project; five-member team",
+    "summary": "An academic team prototype for pet transport bookings, pet profiles, and medical records.",
+    "details": [
+      {
+        "label": "Detailed description",
+        "text": "Our five-member team developed a pet transportation web application prototype with Customer, Admin, and Driver roles. The documented design covers accounts, pet profiles, service booking, delivery status, order history, and payment. I developed CRC cards, designed the core application flow, and contributed to use case diagrams and supporting models. The application code and Flask, SQLAlchemy, MySQL, and Docker Compose stack are the team's work."
+      },
+      {
+        "label": "My role",
+        "text": "CRC-card development, core application flow design, and contributions to use case diagrams and supporting models."
+      },
+      {
+        "label": "Tools and methods",
+        "text": "CRC cards, use case diagrams, and GitHub workflow. Team application stack: Flask, SQLAlchemy, MySQL, and Docker Compose."
+      },
+      {
+        "label": "Result / impact",
+        "text": "My contributions produced CRC cards and a defined booking flow for the academic prototype, alongside use case and model contributions. My learning focus was CRC modeling, application flow, and GitHub collaboration."
+      },
+      {
+        "label": "Core booking flow",
+        "type": "flow",
+        "text": "Login → Pet profile → Booking → Checkout → Order history."
+      }
+    ],
+    "link_groups": [
+      {
+        "label": "Supporting academic group documents",
+        "links": [
+          { "label": "CRC Cards", "href": "assets/docs/pet-butler-crc-cards.pdf" },
+          { "label": "Design Presentation", "href": "assets/docs/pet-butler-presentation.pdf" }
+        ]
+      },
+      {
+        "label": "Repository",
+        "links": [
+          { "label": "github.com/cosmicus0/petButtler", "href": "https://github.com/cosmicus0/petButtler" }
+        ]
+      }
+    ],
+    "images": [],
+    "image_note": "Image content: Deferred. Prioritize the repository, CRC cards, and design presentation as the project evidence."
+  },
+  {
+    "id": "threat-modeling-report",
+    "title": "Software Security Threat Modeling Report — E-commerce",
+    "category": "documents",
+    "category_label": "Document",
+    "period": "2025–2026",
+    "context": "Academic group project",
+    "summary": "An academic group report assessing five e-commerce features through DFD-based STRIDE analysis, with OWASP references.",
+    "details": [
+      {
+        "label": "Detailed description",
+        "text": "Our team assessed payment, search, promotions, login and registration, and cash on delivery, considering trade-offs between proposed mitigations. I handled the cash-on-delivery analysis and wrote Chapter 6, covering conclusions and recommendations. My analysis connected fake accounts, shared-device sessions, and weak logging to identity verification, session controls, and transaction audit logs. On 3 June 2026, the team also demonstrated SQL injection and authentication bypass using Burp Suite in an OWASP Juice Shop training lab."
+      },
+      {
+        "label": "My role",
+        "text": "Cash-on-delivery threat analysis and the conclusions and recommendations chapter."
+      },
+      {
+        "label": "Tools and methods",
+        "text": "Data flow diagrams, STRIDE, and OWASP references. Team training lab: OWASP Juice Shop and Burp Suite."
+      },
+      {
+        "label": "Result / impact",
+        "text": "The report documents COD recommendations for OTP verification, device fingerprinting, auto-logout, primary-device confirmation, and IP, time, and device audit logs with OTP confirmation. My takeaway was that transaction traceability depends on identity, session controls, and logs."
+      },
+      {
+        "label": "Scope",
+        "text": "The mitigations were analytical recommendations. The Juice Shop exercise was a training lab, not a live platform assessment."
+      }
+    ],
+    "link_groups": [
+      {
+        "label": "Academic group document",
+        "links": [
+          { "label": "Software Security Threat Modeling Report", "href": "assets/docs/software-security-threat-model.pdf" }
+        ]
+      }
+    ],
+    "images": [],
+    "image_note": "Image content: Deferred. Prioritize the academic report and its documented analysis as the project evidence."
+  }
+]
