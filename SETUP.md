@@ -37,7 +37,9 @@ The script creates:
 
 Paste `supabase/seed.sql` into a new SQL Editor query and click **Run**. It fills in the current portfolio text. All file fields stay empty (`NULL`). It only seeds tables that are still empty, so running it twice does no harm.
 
-Check the result in **Table Editor**: you should see 1 profile row, 22 skills, 2 projects and 1 certificate.
+Check the result in **Table Editor**: you should see 1 profile row, 9 skills, 2 projects and 1 certificate.
+
+**Already seeded before 2026-10-11?** `seed.sql` skips tables that already have rows, so run `supabase/migrations/20261011120000_skills_update.sql` once in the SQL Editor instead. It changes skill data only (no schema changes): it adds the missing skills, moves the existing ones into place with an empty level, and hides the older seeded skills without deleting them.
 
 ## 4. Fill in `config.js`
 

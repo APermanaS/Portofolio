@@ -46,36 +46,23 @@ on conflict (id) do nothing;
 -- ---------------------------------------------------------------------------
 -- skills
 -- ---------------------------------------------------------------------------
+-- Levels are NULL (set them in the admin panel); icon_url is NULL — the site
+-- shows built-in icons matched by name until an icon is uploaded.
+-- Existing databases: run supabase/migrations/20261011120000_skills_update.sql.
 insert into public.skills (category, name, level, icon_url, sort_order, is_visible)
-select v.category, v.name, v.level, null, v.sort_order, true
+select v.category, v.name, null, null, v.sort_order, true
 from (values
-  ($$Security$$,          $$Threat modeling for cash-on-delivery transactions$$, null::text, 1),
-  ($$Security$$,          $$DFD-based STRIDE analysis$$, null, 2),
-  ($$Security$$,          $$Mitigation recommendations covering identity, session controls, and audit logging$$, null, 3),
-  ($$Security$$,          $$OWASP Top 10$$, null, 4),
+  ($$Security$$,        $$OWASP$$,                   1),
+  ($$Security$$,        $$STRIDE$$,                  2),
+  ($$Security$$,        $$Wireshark$$,               3),
+  ($$Security$$,        $$Burp Suite$$,              4),
 
-  ($$Web Development$$,   $$CRC-card development$$, null, 1),
-  ($$Web Development$$,   $$Core application flow design$$, null, 2),
-  ($$Web Development$$,   $$Contributions to use case diagrams and supporting models$$, null, 3),
-  ($$Web Development$$,   $$HTML$$, null, 4),
-  ($$Web Development$$,   $$CSS$$, null, 5),
-  ($$Web Development$$,   $$PHP$$, null, 6),
-
-  ($$Networking/Server$$, $$Linux$$, null, 1),
-  ($$Networking/Server$$, $$Nmap$$, null, 2),
-  ($$Networking/Server$$, $$Wireshark$$, null, 3),
-  ($$Networking/Server$$, $$PCAP analysis$$, null, 4),
-
-  ($$Database$$,          $$SQL$$, $$Beginner$$, 1),
-
-  ($$Tools$$,             $$GitHub workflow$$, null, 1),
-  ($$Tools$$,             $$VS Code$$, null, 2),
-  ($$Tools$$,             $$Docker$$, null, 3),
-  ($$Tools$$,             $$Figma$$, null, 4),
-  ($$Tools$$,             $$JADX$$, null, 5),
-  ($$Tools$$,             $$Apktool$$, null, 6),
-  ($$Tools$$,             $$Ghidra$$, null, 7)
-) as v(category, name, level, sort_order)
+  ($$Web Development$$, $$HTML$$,                    1),
+  ($$Web Development$$, $$CSS$$,                     2),
+  ($$Web Development$$, $$JavaScript$$,              3),
+  ($$Web Development$$, $$PHP$$,                     4),
+  ($$Web Development$$, $$Core Application Design$$, 5)
+) as v(category, name, sort_order)
 where not exists (select 1 from public.skills);
 
 
