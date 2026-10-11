@@ -16,6 +16,34 @@ keys/accents and the offline fallback live in data.json
 
 
 
+Section backgrounds: the Hero keeps its meteor canvas. Every other section carries one decorative
+layer `<div class="section-gradient" aria-hidden="true">` (absolute, inset 0, z-index 0,
+pointer-events none; section = position relative, overflow hidden; content above at z-index 1).
+- Black sections (.section--dark) → DARK "Bloom Field" (21st.dev): #000 base, Charcoal #343432,
+  Midnight #121211, Ink #000. Motion speed 0.77, amt 1.00, dir 1.
+- White sections (.section--light / .section--white) → LIGHT "Pipo" (21st.dev): Paper #FAF9EF
+  (backdrop #FAF8EE), Apricot #E6B093, Sky blue #A3CEFF, static grain (overlay). Speed 0.86, amt 0.72, dir 1.
+- The gradient follows the section's theme class, so re-striping and new sections get the right one
+  automatically; data-gradient="none" opts a section out. Gradients are soft atmosphere, never busy.
+- Motion (section-gradients.js, CONFIG at the top): blob offset = (sin(ph·0.55 + p) − sin(p))·14·amt·U
+  for x and (sin(ph·0.43 + p2) − sin(p2))·14·amt·U for y, U = 0.25 (% of width/height); p, p2 static.
+  Zero at ph = 0 (no snap), no animated hash, no rounding, grain never animated. One shared rAF loop,
+  ~30 fps (20 fps < 734px), only sections in view, paused when the tab is hidden. The static CSS in
+  style.css §18 is the no-JS and prefers-reduced-motion frame (ph = 0).
+
+Text tokens (per surface, style.css §1). Every surface sets its own text colour; never rely on the
+section colour inheriting into a card of the opposite tone. Minimum 4.5:1 body / 3:1 large text,
+measured against the WORST-CASE pixel behind the text.
+- --text-on-dark #f5f5f7 / --text-on-dark-muted #a1a1a6 — opaque dark surfaces (#000, #111113, #1d1d1f)
+- --text-on-light #1d1d1f / --text-on-light-muted #636366 — opaque light surfaces (#fff, #f5f5f7, #e8e8ed)
+- --text-on-dark-gradient(-muted) = #f5f5f7 / #a1a1a6 — directly on Bloom Field (worst pixel #343432: 11.5 / 4.85:1)
+- --text-on-light-gradient(-muted) = #1d1d1f / #3a3a3c — directly on Pipo (worst pixel #de9872 = apricot
+  centre + darkest grain: 7.1 / 4.8:1). If a grey fails, darken the text, never weaken the gradient.
+- Section helpers: --sec-muted = muted text on the section's cards; --sec-bg-muted = muted text on the
+  section background. Cards and controls on a gradient get an opaque surface (e.g. the segmented track).
+- Accent gradient text on Bloom Field is only allowed as large text (≥ 24px, or ≥ 18.66px bold): its
+  darkest colour #6170f9 is 3.1:1 on #343432.
+
 Never invent content. Hide anything marked \[ISI MANUAL]
 
 One change per prompt. Do not touch unrelated sections.
@@ -79,3 +107,14 @@ Change Log
   Sections, Experience (bullet editor, "I'm currently here" disables End), Education; Certificates gets
   expiry / credential URL; the CV upload shows the original file name and upload date. Tablet nav spacing is
   tighter (734–1067px) to fit the extra links.
+- 2026-10-11 · Projects (fix) / All sections · Invisible project card title fixed at the source: .project-card
+  is a white surface but set no text colour, so the title (h3 > button, both inheriting) took --text-on-dark
+  from .section--dark after Projects moved to black (#f5f5f7 on #fff = 1.09:1). The card now sets
+  color: var(--text-on-light). Added per-surface text tokens (--text-on-*-gradient, --sec-bg-muted) and ran a
+  static WCAG audit; changed pairs: muted light grey #6e6e73 → #636366 (failed on #e8e8ed segmented track 4.15
+  and tinted placeholder 4.25), muted dark grey #86868b → #a1a1a6 (failed on dark placeholders 3.85 and skill
+  tiles 4.29), About text / stats / Contact labels on the light gradient → #3a3a3c, Skills rest/closing and
+  Contact-on-dark labels on the dark gradient → #a1a1a6, the dark segmented track is now opaque #1d1d1f, and the
+  gradient words in the Skills closing line are bold (large text). Animated section gradients: Bloom Field on
+  black sections, Pipo on white sections (style.css §18, new section-gradients.js, static .section-gradient
+  layers in index.html). Hero, footer, admin and data unchanged.
