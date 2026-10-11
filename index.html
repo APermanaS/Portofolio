@@ -41,6 +41,8 @@
   <script src="script.js" defer></script>
   <!-- Hero background only (independent of content loading) -->
   <script src="hero-meteors.js" defer></script>
+  <!-- Animated section backgrounds (Bloom Field / Pipo); static CSS gradients without it -->
+  <script src="section-gradients.js" defer></script>
 
   <script type="application/ld+json">
   {
@@ -106,6 +108,7 @@
 
     <!-- ============ About (signature: gradient rule above the stat row) ============ -->
     <section id="about" class="about section section--light" aria-labelledby="about-title">
+      <div class="section-gradient" aria-hidden="true"></div>
       <div class="container">
         <h2 id="about-title" class="section-title reveal">About</h2>
 
@@ -147,6 +150,7 @@
 
     <!-- ============ Skills (signature: category cards side by side, each with its own accent + ornament) ============ -->
     <section id="skills" class="skills section--dark" aria-labelledby="skills-title" data-section="skills">
+      <div class="section-gradient" aria-hidden="true"></div>
       <div class="container">
         <h2 id="skills-title" class="skills__headline reveal">
           <span class="skills__lead">Skills,</span>
@@ -166,6 +170,7 @@
     <!-- ============ Organization Experience (signature: thin timeline line with dots) ============ -->
     <!-- data-theme="auto": script.js keeps the black / white alternation when a section is hidden -->
     <section id="experience" class="experience section section--light" aria-labelledby="experience-title" data-section="experience" data-theme="auto">
+      <div class="section-gradient" aria-hidden="true"></div>
       <div class="container">
         <h2 id="experience-title" class="section-title reveal">Organization Experience</h2>
 
@@ -192,6 +197,7 @@
 
     <!-- ============ Projects (signature: segmented toggle + flow chips) ============ -->
     <section id="projects" class="projects section section--dark" aria-labelledby="projects-title" data-section="projects" data-theme="auto">
+      <div class="section-gradient" aria-hidden="true"></div>
       <div class="container">
         <div class="section-head">
           <h2 id="projects-title" class="section-title reveal">Projects</h2>
@@ -210,6 +216,7 @@
 
     <!-- ============ Education (signature: gradient hairline on top of each card) ============ -->
     <section id="education" class="education section section--light" aria-labelledby="education-title" data-section="education" data-theme="auto">
+      <div class="section-gradient" aria-hidden="true"></div>
       <div class="container">
         <h2 id="education-title" class="section-title reveal">Education</h2>
 
@@ -241,6 +248,7 @@
 
     <!-- ============ Certifications (signature: badge seal + gradient ring on the card) ============ -->
     <section id="certifications" class="certifications section section--dark" aria-labelledby="certifications-title" data-section="certifications" data-theme="auto">
+      <div class="section-gradient" aria-hidden="true"></div>
       <div class="container">
         <h2 id="certifications-title" class="section-title reveal">Certifications</h2>
 
@@ -273,6 +281,7 @@
 
     <!-- ============ Contact (signature: gradient underline on hover) ============ -->
     <section id="contact" class="contact section section--white" aria-labelledby="contact-title" data-theme="auto">
+      <div class="section-gradient" aria-hidden="true"></div>
       <div class="container">
         <h2 id="contact-title" class="section-title reveal">Contact</h2>
         <address class="contact__list reveal-stagger">

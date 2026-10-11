@@ -18,6 +18,7 @@
    15. Contact
    16. Footer
    17. Reduced motion
+   18. Section gradients (Bloom Field dark / Pipo light) — see section-gradients.js
    ========================================================================== */
 
 
@@ -31,10 +32,20 @@
   --color-light: #f5f5f7;
   --color-light-2: #e8e8ed;
 
+  /* Per-surface text tokens. Every surface sets its own text colour; text never
+     relies on inheriting the section colour across a surface change (that is
+     what made the project card title white-on-white). Ratios = WCAG, worst case.
+     Opaque dark surfaces (#000, #111113, #1d1d1f, skill tiles, dark placeholders) */
   --text-on-dark: #f5f5f7;
-  --text-on-dark-muted: #86868b;   /* 5.9:1 on #000 */
+  --text-on-dark-muted: #a1a1a6;   /* ≥ 5.4:1 on every opaque dark surface, 8.2:1 on #000 */
+  /* Opaque light surfaces (#fff cards, #f5f5f7, #e8e8ed, tinted placeholders, modals) */
   --text-on-light: #1d1d1f;
-  --text-on-light-muted: #6e6e73;  /* 4.7:1 on #f5f5f7 */
+  --text-on-light-muted: #636366;  /* ≥ 4.9:1 on #e8e8ed, 6.0:1 on #fff */
+  /* Text placed directly on the animated section gradients (§18) */
+  --text-on-dark-gradient: var(--text-on-dark);          /* 11.5:1 on #343432 (lightest Bloom Field pixel) */
+  --text-on-dark-gradient-muted: var(--text-on-dark-muted); /* 4.85:1 on #343432 */
+  --text-on-light-gradient: var(--text-on-light);        /* 7.1:1 on #de9872 (apricot centre + darkest grain) */
+  --text-on-light-gradient-muted: #3a3a3c;               /* 4.8:1 on #de9872, 5.9:1 on #e6b093 */
 
   --surface-dark: #111113;
   --surface-dark-2: #1d1d1f;
@@ -180,9 +191,12 @@ address { font-style: normal; }
 /* Theme tokens for sections that can sit on either background. Sections marked
    data-theme="auto" are re-striped by script.js when another section is hidden,
    so their components use these tokens instead of fixed dark/light colours. */
+/* --sec-muted   = muted text on the section's cards (opaque surfaces)
+   --sec-bg-muted = muted text placed directly on the section background (gradient) */
 .section--dark {
   --sec-bg: var(--color-black);
   --sec-muted: var(--text-on-dark-muted);
+  --sec-bg-muted: var(--text-on-dark-gradient-muted);
   --sec-hairline: var(--hairline-dark);
   --sec-surface: var(--surface-dark);
   --sec-surface-2: var(--surface-dark-2);
@@ -193,6 +207,7 @@ address { font-style: normal; }
 .section--white {
   --sec-bg: var(--color-light);
   --sec-muted: var(--text-on-light-muted);
+  --sec-bg-muted: var(--text-on-light-gradient-muted);
   --sec-hairline: var(--hairline-light);
   --sec-surface: var(--color-white);
   --sec-surface-2: var(--color-light);
@@ -217,7 +232,7 @@ address { font-style: normal; }
   font-size: 21px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: var(--text-on-dark-muted);
+  color: var(--sec-bg-muted, var(--text-on-dark-gradient-muted));
   margin-bottom: var(--space-3);
 }
 
@@ -263,11 +278,11 @@ address { font-style: normal; }
 .skip-link:focus { top: var(--space-1); }
 
 .load-error {
-  color: var(--text-on-dark-muted);
+  color: var(--sec-bg-muted, var(--text-on-dark-gradient-muted));
   padding-block: var(--space-4);
 }
 
-.section--light .load-error { color: var(--text-on-light-muted); }
+/* (light sections: --sec-bg-muted resolves to --text-on-light-gradient-muted) */
 
 
 /* ==========================================================================
@@ -648,7 +663,7 @@ address { font-style: normal; }
   gap: var(--space-3);
   font-size: 19px;
   line-height: 1.55;
-  color: var(--text-on-light-muted);
+  color: var(--text-on-light-gradient-muted);
 }
 
 .about__lead {
@@ -705,13 +720,13 @@ address { font-style: normal; }
   font-size: 0.45em;
   font-weight: 600;
   letter-spacing: 0;
-  color: var(--text-on-light-muted);
+  color: var(--text-on-light-gradient-muted);
 }
 
 .stat__label {
   font-size: 14px;
   font-weight: 500;
-  color: var(--text-on-light-muted);
+  color: var(--text-on-light-gradient-muted);
 }
 
 
@@ -744,7 +759,7 @@ address { font-style: normal; }
 
 .skills__lead   { color: var(--text-on-dark); }
 .skills__accent { font-style: italic; padding-right: 0.06em; }
-.skills__rest   { font-weight: 600; color: var(--text-on-dark-muted); }
+.skills__rest   { font-weight: 600; color: var(--text-on-dark-gradient-muted); }
 
 /* Card track: grid on tablet/desktop, carousel on mobile */
 .skills__track {
@@ -1031,9 +1046,14 @@ address { font-style: normal; }
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.02em;
-  color: var(--text-on-dark-muted);
+  color: var(--text-on-dark-gradient-muted);
   text-wrap: balance;
 }
+
+/* Accent words sit on the Bloom Field gradient: their darkest gradient colour
+   (#6170f9) is 3.1:1 on the lightest gradient pixel, so they must qualify as
+   WCAG "large text" (≥ 18.66px bold) at every size — the line is ≥ 22px. */
+.skills__closing .gradient-text { font-weight: 700; }
 
 
 /* ==========================================================================
@@ -1131,7 +1151,9 @@ address { font-style: normal; }
 }
 
 /* Projects on a black background (2026-10-11 order): darker track, same white pill */
-.section--dark .segmented { background: rgba(255, 255, 255, 0.12); }
+/* Opaque track: a translucent one let the gradient through (#a1a1a6 on white 12% over
+   #343432 = 3.3:1). #a1a1a6 on #1d1d1f = 6.5:1. */
+.section--dark .segmented { background: var(--surface-dark-2); box-shadow: inset 0 0 0 1px var(--hairline-dark); }
 .section--dark .segmented__btn { color: var(--text-on-dark-muted); }
 .section--dark .segmented__btn:hover { color: var(--text-on-dark); }
 
@@ -1150,7 +1172,11 @@ address { font-style: normal; }
   display: grid;
   overflow: hidden;
   border-radius: var(--radius-card);
+  /* Light surface → it sets its own text colour. Without this the title
+     (h3 > button, both "color: inherit") inherited --text-on-dark from
+     .section--dark once Projects moved to black: #f5f5f7 on #fff = 1.09:1. */
   background: var(--color-white);
+  color: var(--text-on-light);
   box-shadow: var(--shadow-card);
   transition: transform 0.5s var(--ease-out), box-shadow 0.5s var(--ease-out);
   animation: fade-up 0.6s var(--ease-out) both;  /* replays when the filter shows it */
@@ -2128,7 +2154,7 @@ address { font-style: normal; }
   grid-area: label;
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-on-light-muted);
+  color: var(--sec-bg-muted, var(--text-on-light-gradient-muted));
 }
 
 .contact-row__value {
@@ -2159,7 +2185,7 @@ address { font-style: normal; }
 .section--dark .contact__list,
 .section--dark .contact-row { border-color: var(--hairline-dark); }
 
-.section--dark .contact-row__label { color: var(--text-on-dark-muted); }
+/* label colour follows --sec-bg-muted (dark: --text-on-dark-gradient-muted) */
 
 
 /* ==========================================================================
@@ -2261,4 +2287,78 @@ address { font-style: normal; }
   .xp-card:hover,
   .edu-card:hover,
   .cert-card:hover { transform: none; }
+}
+
+
+/* ==========================================================================
+   18. Section gradients — soft animated atmosphere behind every non-hero section
+   --------------------------------------------------------------------------
+   • Each section gets ONE decorative layer: <div class="section-gradient" aria-hidden="true">
+     (static in index.html; section-gradients.js adds it to any section that lacks one).
+   • The look follows the section's theme CLASS, so script.js re-striping
+     (data-theme="auto") and new sections pick the right gradient automatically:
+       .section--dark                  → DARK  "Bloom Field" (21st.dev)
+       .section--light / .section--white → LIGHT "Pipo" (21st.dev)
+     Opt out per section with data-gradient="none". The hero keeps its meteor canvas.
+   • Blob centres are base% + offset. The offsets (--b1dx, --b1dy … --b4dy) are
+     written by section-gradients.js and default to 0%, so this CSS on its own
+     (no JS, reduced motion) is exactly the static base design = the frame at ph = 0.
+   • The grain layer (Pipo) is never animated.
+   • Text directly on a gradient uses the --text-on-*-gradient tokens (§1); cards
+     keep their own opaque surface and text colour.
+   ========================================================================== */
+main > section:not(.hero) {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.section-gradient {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Section content always paints above the gradient layer */
+.section-gradient ~ * {
+  position: relative;
+  z-index: 1;
+}
+
+[data-gradient="none"] > .section-gradient { display: none; }
+
+/* — DARK · "Bloom Field" — Charcoal #343432 · Midnight #121211 · Ink #000000 — */
+.gradient-dark,
+.section--dark > .section-gradient {
+  background-color: #000000;
+  background-image:
+    radial-gradient(circle at calc(65.34% + var(--b1dx, 0%)) calc(44.62% + var(--b1dy, 0%)), rgba(52, 52, 50, 1) 0%, rgba(52, 52, 50, 0.844) 8.53%, rgba(52, 52, 50, 0.5) 17.05%, rgba(52, 52, 50, 0.156) 25.58%, rgba(52, 52, 50, 0) 34.1%),
+    radial-gradient(circle at calc(28.07% + var(--b2dx, 0%)) calc(74.48% + var(--b2dy, 0%)), rgba(18, 18, 17, 1) 0%, rgba(18, 18, 17, 0.844) 11.15%, rgba(18, 18, 17, 0.5) 22.3%, rgba(18, 18, 17, 0.156) 33.45%, rgba(18, 18, 17, 0) 44.6%),
+    radial-gradient(circle at calc(52.42% + var(--b3dx, 0%)) calc(19.94% + var(--b3dy, 0%)), rgba(52, 52, 50, 1) 0%, rgba(52, 52, 50, 0.844) 14.13%, rgba(52, 52, 50, 0.5) 28.25%, rgba(52, 52, 50, 0.156) 42.38%, rgba(52, 52, 50, 0) 56.5%),
+    radial-gradient(circle at calc(80.31% + var(--b4dx, 0%)) calc(84.47% + var(--b4dy, 0%)), rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.844) 17.27%, rgba(0, 0, 0, 0.5) 34.55%, rgba(0, 0, 0, 0.156) 51.82%, rgba(0, 0, 0, 0) 69.1%);
+  background-size: auto;
+  background-blend-mode: normal;
+}
+
+/* — LIGHT · "Pipo" — Apricot #E6B093 · Sky blue #A3CEFF · Paper #FAF9EF, static grain — */
+.gradient-light,
+.section--light > .section-gradient,
+.section--white > .section-gradient {
+  background-color: #FAF9EF;
+  background-image:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.305'/></svg>"),
+    radial-gradient(circle at calc(68.1% + var(--b1dx, 0%)) calc(46.03% + var(--b1dy, 0%)), rgba(230, 176, 147, 1) 0%, rgba(230, 176, 147, 0.844) 10.28%, rgba(230, 176, 147, 0.5) 20.55%, rgba(230, 176, 147, 0.156) 30.83%, rgba(230, 176, 147, 0) 41.1%),
+    radial-gradient(circle at calc(25.17% + var(--b2dx, 0%)) calc(75.99% + var(--b2dy, 0%)), rgba(163, 206, 255, 1) 0%, rgba(163, 206, 255, 0.844) 11.15%, rgba(163, 206, 255, 0.5) 22.3%, rgba(163, 206, 255, 0.156) 33.45%, rgba(163, 206, 255, 0) 44.6%),
+    radial-gradient(circle at calc(53.11% + var(--b3dx, 0%)) calc(12.71% + var(--b3dy, 0%)), rgba(250, 249, 239, 1) 0%, rgba(250, 249, 239, 0.844) 16.66%, rgba(250, 249, 239, 0.5) 33.33%, rgba(250, 249, 239, 0.156) 49.99%, rgba(250, 249, 239, 0) 66.65%);
+  background-size: 120px 120px, auto, auto, auto;
+  background-blend-mode: overlay, normal, normal, normal;
+}
+
+/* Section base colours match the gradient backdrops (visible only for a frame
+   before the layer paints) and give the timeline dot ring (--sec-bg) a matching colour. */
+main > .section--light:not(.hero),
+main > .section--white:not(.hero) {
+  --sec-bg: #FAF8EE;
+  background-color: #FAF8EE;
 }
