@@ -39,7 +39,35 @@ Paste `supabase/seed.sql` into a new SQL Editor query and click **Run**. It fill
 
 Check the result in **Table Editor**: you should see 1 profile row, 9 skills, 2 projects and 1 certificate.
 
-**Already seeded before 2026-10-11?** `seed.sql` skips tables that already have rows, so run `supabase/migrations/20261011120000_skills_update.sql` once in the SQL Editor instead. It changes skill data only (no schema changes): it adds the missing skills, moves the existing ones into place with an empty level, and hides the older seeded skills without deleting them.
+**Already seeded before 2026-10-11?** `seed.sql` skips tables that already have rows, so run `supabase/migrations/20261011120000_skills_update.sql` once in the SQL Editor instead. It changes skill data only (no schema changes): it adds the missing skills, moves the existing ones into place with an empty level, and hides the older seeded skills without deleting them. (A brand-new project doesn't need this file, because `seed.sql` already has the new skills.)
+
+## 3b. Run the Experience / Education migration
+
+Every project needs this once, both new ones and ones set up earlier. Run it **after** `schema.sql` and `seed.sql`.
+
+File: **`supabase/migrations/20261011130000_experience_education.sql`**
+
+1. Open the file in a text editor and **Find & Replace every** `ADMIN_UUID_HERE` with your User UID, the same as in step 2. Keep the quotes.
+2. In Supabase, go to **SQL Editor → New query**, paste the whole file and click **Run**.
+   - Expected result: *Success. No rows returned.*
+   - If you see *replace the admin UUID placeholder…* or *invalid input syntax for type uuid*, the placeholder was not replaced correctly. Nothing is changed in that case. Fix the file and run it again.
+3. Check **Table Editor**:
+   - `experience` has 1 row (BINUS Cyber Security Community). Its dates and location are empty on purpose. Fill them in under **Admin → Experience**.
+   - `education` has 2 rows (BINUS University, SMAIT Auliya).
+   - `certificates` has the new columns `expiry_date` and `credential_url`.
+   - `profile` has the new columns `hidden_sections`, `cv_file_name` and `cv_uploaded_at`.
+
+What the file does:
+
+- Creates the tables `experience` and `education` with RLS **enabled**. Anyone can read visible rows (`is_visible = true`). Only your UUID can read hidden rows, insert, update or delete.
+- Adds explicit grants, because *Automatically expose new tables* is disabled: `USAGE` on schema `public`, `SELECT` for `anon` and `authenticated`, `INSERT/UPDATE/DELETE` for `authenticated` only, and `USAGE` on the two id sequences for `authenticated`.
+- Adds `expiry_date` and `credential_url` to `certificates`. Adds `hidden_sections` (used by **Admin → Sections**), `cv_file_name` and `cv_uploaded_at` to `profile`.
+- Seeds the new tables only while they are empty. It adds the ISO/IEC 27001 certificate only if `certificates` is empty, so your existing certificate is left alone.
+- Doesn't change storage. Logos and certificate images use the existing `portfolio-assets` bucket (`images/` folder).
+
+It is safe to run again. It never duplicates rows or overwrites edits you made in the admin panel.
+
+> Until this file has run, the public site keeps working: Experience and Education fall back to `data.json`, and certificates load without the new fields. The admin pages **Experience**, **Education** and **Sections** ask you to run the migration.
 
 ## 4. Fill in `config.js`
 
@@ -105,7 +133,9 @@ Checklist:
 | --- | --- |
 | Admin says *Supabase is not configured yet* | Fill in `config.js` (step 4) and reload. |
 | *You don't have permission to make this change* | `ADMIN_UUID_HERE` was not replaced with **your** User UID. Re-run the fixed `schema.sql`. |
-| *The database tables are missing* | Run `schema.sql`. |
+| *A database table is missing* | Run `schema.sql`, then `supabase/migrations/20261011130000_experience_education.sql` (step 3b). |
+| *The database is missing new columns* | Run `supabase/migrations/20261011130000_experience_education.sql` (step 3b), then reload the admin page. |
+| *permission denied for table experience / education* | The grants are missing. Re-run the migration from step 3b. |
 | *permission denied for table …* in the browser console | The grants are missing. Re-run `schema.sql`. |
 | Public site still shows old text | It uses `data.json` whenever a table is empty or Supabase can't be reached. Check the browser console for `Supabase:` warnings. |
 | Upload: *This file type is not allowed by the storage bucket* | The bucket settings were changed by hand. Re-run `schema.sql`. |

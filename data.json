@@ -14,7 +14,8 @@
     "linkedin": "https://www.linkedin.com/in/andhikapermanasagiyono",
     "github": "https://github.com/APermanaS",
     "photo_url": null,
-    "cv_url": "assets/CV.pdf"
+    "cv_url": "assets/CV.pdf",
+    "hidden_sections": []
   },
 
   "skill_categories": [
@@ -69,11 +70,57 @@
     }
   ],
 
+  "experience": [
+    {
+      "organization": "BINUS Cyber Security Community",
+      "role": "Media and Publication Activist",
+      "location": null,
+      "start_date": null,
+      "end_date": null,
+      "is_current": false,
+      "show_months": true,
+      "bullets": ["Help produce Cyber Talk."],
+      "logo_url": null,
+      "sort_order": 1
+    }
+  ],
+
+  "education": [
+    {
+      "institution": "BINUS University",
+      "degree": "Bachelor's Degree in Computer Science",
+      "field_of_study": "Cyber Security",
+      "start_date": "2024-09-01",
+      "end_date": null,
+      "end_label": "Expected 2028",
+      "gpa": "3.44 / 4.00",
+      "description": "Relevant coursework: Software Engineering; Software Security; and Penetration Testing",
+      "logo_url": null,
+      "show_months": true,
+      "sort_order": 1
+    },
+    {
+      "institution": "SMAIT Auliya",
+      "degree": null,
+      "field_of_study": null,
+      "start_date": "2021-01-01",
+      "end_date": "2024-01-01",
+      "end_label": null,
+      "gpa": null,
+      "description": null,
+      "logo_url": null,
+      "show_months": false,
+      "sort_order": 2
+    }
+  ],
+
   "certificates": [
     {
       "title": "ISO/IEC 27001:2022 Information Security Associate",
       "issuer": "SkillFront",
       "issued_date": "2026-09-25",
+      "expiry_date": null,
+      "credential_url": null,
       "image_url": "assets/certificate.jpg",
       "sort_order": 1
     }

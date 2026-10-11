@@ -11,7 +11,8 @@
    7. Upload field (drag & drop, preview, progress, validation)
    8. Form builder (fields, validation, dirty tracking)
    9. Editor side panel
-   10. Views: Profile, Skills, Projects, Certificates, Files
+   10. Views: Profile, Sections, Skills, Experience, Projects, Education,
+       Certificates, Files
    11. Navigation, auth, boot
 
    SECURITY
@@ -70,8 +71,14 @@
     stats: { rows: 8, label: 40, value: 20, suffix: 20 },
     skills: { category: 60, name: 120, level: 40 },
     projects: { title: 150, short_desc: 300, detail_desc: 6000, role: 1500, tools: 1500, result: 2000, period: 60, repo_url: 300 },
-    certificates: { title: 200, issuer: 120 }
+    certificates: { title: 200, issuer: 120, credential_url: 500 },
+    experience: { organization: 150, role: 150, location: 120, bullets: 6, bullet: 300 },
+    education: { institution: 150, degree: 150, field_of_study: 150, end_label: 60, gpa: 30, description: 1000 },
+    cvFileName: 255
   };
+
+  /** File of the 2026-10-11 migration (shown in "missing column / table" messages). */
+  const MIGRATION_FILE = 'supabase/migrations/20261011130000_experience_education.sql';
 
   function readConfig() {
     const cfg = window.PORTFOLIO_CONFIG || {};
@@ -132,7 +139,10 @@
     external: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17L17 7M8 7h9v9"/></svg>',
     link: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
     check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
-    alert: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/></svg>'
+    alert: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/></svg>',
+    briefcase: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 12.5h18"/></svg>',
+    graduation: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 9L12 4.5 21.5 9 12 13.5z"/><path d="M6.5 11v4.5c1.5 1.3 3.4 2 5.5 2s4-.7 5.5-2V11M21.5 9v5"/></svg>',
+    layout: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M3.5 9h17M3.5 14.5h17"/></svg>'
   };
 
   function icon(name) {
@@ -180,8 +190,31 @@
     return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
   }
 
+  /** "2024-09-01" → "Sep 2024" (or "2024" when months are switched off) */
+  function formatMonth(value, showMonths = true) {
+    const match = /^(\d{4})-(\d{2})/.exec(String(value || ''));
+    if (!match) return '';
+    if (!showMonths) return match[1];
+    const date = new Date(Date.UTC(+match[1], +match[2] - 1, 1));
+    return date.toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+  }
+
+  const periodText = (start, end) => [start, end].filter(Boolean).join(' \u2013 ');
+
+  function formatDateTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
   const bySortOrder = (a, b) =>
     (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0) || (Number(a.id) || 0) - (Number(b.id) || 0);
+
+  /** Same order as the public site: sort_order, then newest start date, then id. */
+  const byOrderThenStart = (a, b) =>
+    (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0) ||
+    String(b.start_date || '').localeCompare(String(a.start_date || '')) ||
+    (Number(a.id) || 0) - (Number(b.id) || 0);
 
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -293,7 +326,14 @@
     if (code === '42501' || /row-level security|permission denied/i.test(message)) return new Error(PERMISSION_MESSAGE);
     if (code === '23514') return new Error('The database rejected a value (too long or wrong format). Please check the fields.');
     if (code === '23502') return new Error('A required field is missing.');
-    if (code === '42P01' || code === 'PGRST205') return new Error('The database tables are missing. Run supabase/schema.sql first.');
+    if (code === '42P01' || code === 'PGRST205') {
+      const missing = new Error(`A database table is missing. Run supabase/schema.sql and ${MIGRATION_FILE} (see SETUP.md), then reload.`);
+      missing.missingTable = true;
+      return missing;
+    }
+    if (code === '42703' || code === 'PGRST204') {
+      return new Error(`The database is missing new columns. Run ${MIGRATION_FILE} in the Supabase SQL Editor (see SETUP.md), then reload.`);
+    }
     if (/failed to fetch|network|load failed/i.test(message)) {
       return new Error("Can't reach Supabase. Check your internet connection and try again.");
     }
@@ -515,7 +555,7 @@
           save (the user confirms this up front); unsaved uploads are cleaned
           up when the form is discarded.
      ------------------------------------------------------------------------ */
-  function createUploadField(field, value) {
+  function createUploadField(field, value, values = {}) {
     const kindKey = field.kind;
     const kind = FILE_KINDS[kindKey];
     const isPdf = kindKey === 'pdf';
@@ -526,7 +566,11 @@
       current: value || null,
       sessionUploads: new Set(),
       busy: false,
-      preview: null // { objectUrl, name, size } for a freshly chosen file
+      preview: null, // { objectUrl, name, size } for a freshly chosen file
+      // Optional original file name + upload time of the saved file (field.infoFields, e.g. the CV)
+      savedName: field.infoFields ? values[field.infoFields.name] || null : null,
+      savedAt: field.infoFields ? values[field.infoFields.date] || null : null,
+      lastUpload: null // { name, at } of the most recent successful upload in this form
     };
 
     const accept = [...Object.keys(kind.types), ...Object.values(kind.types).flat().map((e) => `.${e}`)].join(',');
@@ -604,10 +648,12 @@
     }
 
     function renderFile() {
-      const name = state.preview?.name || fileNameOf(state.current) || 'Uploaded file';
+      const saved = state.current === state.original;
+      const name = state.preview?.name || (saved && state.savedName) || fileNameOf(state.current) || 'Uploaded file';
+      const when = saved && state.savedAt ? formatDateTime(state.savedAt) : '';
       const meta = state.preview
         ? `${formatBytes(state.preview.size)} · Uploaded — save to apply`
-        : isPdf ? 'PDF document' : 'Current image';
+        : [isPdf ? 'PDF document' : 'Current image', when && `uploaded ${when}`].filter(Boolean).join(' · ');
       body.replaceChildren(
         h(
           'div',
@@ -704,6 +750,7 @@
         const url = await uploadFile(file, randomPath(kindKey, check.ext), check.type, setProgress);
         state.sessionUploads.add(url);
         state.current = url;
+        state.lastUpload = { url, name: sanitizeText(file.name).slice(0, LIMITS.cvFileName) || null, at: new Date().toISOString() };
         await dropSessionUpload(previous); // an earlier unsaved upload is no longer needed
         toast(`${isPdf ? 'Document' : 'Image'} uploaded. Remember to save.`);
       } catch (err) {
@@ -771,9 +818,16 @@
       read: () => ({ value: state.current }),
       isBusy: () => state.busy,
       showError,
+      /** { name, at } for the file that is about to be saved (null when removed / unchanged). */
+      uploadInfo: () => (state.current && state.lastUpload?.url === state.current ? state.lastUpload : null),
       /** After a successful save: delete the file that was replaced or removed. */
       async commit() {
         const old = state.original;
+        if (old !== state.current) {
+          const info = state.lastUpload?.url === state.current ? state.lastUpload : null;
+          state.savedName = info?.name || null;
+          state.savedAt = info?.at || null;
+        }
         state.original = state.current;
         state.sessionUploads.clear();
         clearPreview();
@@ -801,9 +855,96 @@
 
   /* ------------------------------------------------------------------------
      8. Form builder
-        field: { name, label, type, max, required, hint, rows, options, kind, list, full }
-        types: text | textarea | email | url | date | select | switch | upload | stats | heading
+        field: { name, label, type, max, required, hint, rows, options, kind, list, full,
+                 disables (checkbox: name of the field it disables while ticked),
+                 infoFields (upload: { name, date } columns with the original file name / time),
+                 maxItems / itemMax (bullets) }
+        types: text | textarea | email | url | date | month | select | switch | checkbox |
+               upload | stats | bullets | heading
      ------------------------------------------------------------------------ */
+
+  /** Bullet points: one line each; add, remove and reorder. Value = array of strings. */
+  function createBulletsField(field, value) {
+    const maxItems = field.maxItems || 6;
+    const itemMax = field.itemMax || 300;
+    const list = h('ol', { class: 'bullets-editor__list', role: 'list' });
+    const addBtn = h('button', { type: 'button', class: 'btn btn--secondary btn--small' }, icon('plus'), 'Add bullet point');
+    const changed = () => list.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const rowsOf = () => $$('.bullets-editor__row', list);
+
+    const refresh = () => {
+      const rows = rowsOf();
+      rows.forEach((row, i) => {
+        $('[data-act="up"]', row).disabled = i === 0;
+        $('[data-act="down"]', row).disabled = i === rows.length - 1;
+        $('input', row).setAttribute('aria-label', `Bullet point ${i + 1}`);
+      });
+      addBtn.disabled = rows.length >= maxItems;
+    };
+
+    const addRow = (text = '') => {
+      const input = h('input', { class: 'input', type: 'text', value: text, maxlength: String(itemMax), placeholder: 'e.g. Help produce Cyber Talk.' });
+      const row = h('li', { class: 'bullets-editor__row' });
+      const move = (delta, act) => {
+        const sibling = delta < 0 ? row.previousElementSibling : row.nextElementSibling;
+        if (!sibling) return;
+        if (delta < 0) sibling.before(row);
+        else sibling.after(row);
+        refresh();
+        changed();
+        const btn = $(`[data-act="${act}"]`, row);
+        (btn.disabled ? input : btn).focus();
+      };
+      row.append(
+        h('span', { class: 'bullets-editor__dot', 'aria-hidden': 'true' }),
+        input,
+        h('button', { type: 'button', class: 'icon-btn', 'data-act': 'up', 'aria-label': 'Move bullet point up', title: 'Move up', onclick: () => move(-1, 'up') }, icon('up')),
+        h('button', { type: 'button', class: 'icon-btn', 'data-act': 'down', 'aria-label': 'Move bullet point down', title: 'Move down', onclick: () => move(1, 'down') }, icon('down')),
+        h('button', {
+          type: 'button',
+          class: 'icon-btn icon-btn--danger',
+          'aria-label': 'Remove bullet point',
+          title: 'Remove',
+          onclick: () => {
+            const next = row.nextElementSibling || row.previousElementSibling;
+            row.remove();
+            if (!rowsOf().length) addRow();
+            refresh();
+            changed();
+            ($('input', next || list) || addBtn).focus();
+          }
+        }, icon('trash'))
+      );
+      list.append(row);
+      refresh();
+      return row;
+    };
+
+    addBtn.addEventListener('click', () => {
+      $('input', addRow())?.focus();
+      changed();
+    });
+
+    const initial = (Array.isArray(value) ? value : []).filter((v) => typeof v === 'string').slice(0, maxItems);
+    (initial.length ? initial : ['']).forEach((text) => addRow(text));
+
+    const collect = () => rowsOf().map((row) => sanitizeText($('input', row).value));
+
+    return {
+      element: h('div', { class: 'bullets-editor' }, list, addBtn),
+      focusTarget: () => $('input', list) || addBtn,
+      raw: collect,
+      read() {
+        const items = collect().filter(Boolean);
+        const tooLong = items.findIndex((text) => text.length > itemMax);
+        if (tooLong !== -1) return { error: `Bullet point ${tooLong + 1} is too long (max ${itemMax} characters).` };
+        if (items.length > maxItems) return { error: `You can add at most ${maxItems} bullet points.` };
+        return { value: items };
+      }
+    };
+  }
+
   function createStatsField(field, value) {
     const L = LIMITS.stats;
     const list = h('div', { class: 'stats-editor__list' });
@@ -878,7 +1019,7 @@
     };
   }
 
-  function createControl(field, value) {
+  function createControl(field, value, values = {}) {
     const id = nextId('f');
     const hintId = `${id}-hint`;
     const errorId = `${id}-error`;
@@ -890,9 +1031,11 @@
     const textual = ['text', 'textarea', 'email', 'url'].includes(field.type);
 
     if (field.type === 'upload') {
-      control = createUploadField(field, value);
+      control = createUploadField(field, value, values);
     } else if (field.type === 'stats') {
       control = createStatsField(field, value);
+    } else if (field.type === 'bullets') {
+      control = createBulletsField(field, value);
     } else {
       if (field.type === 'textarea') {
         input = h('textarea', { class: 'input input--area', id, rows: String(field.rows || 4) });
@@ -903,6 +1046,18 @@
         input.value = value ?? field.options[0].value;
       } else if (field.type === 'switch') {
         input = h('input', { type: 'checkbox', class: 'switch__input', id, role: 'switch', checked: value !== false });
+      } else if (field.type === 'checkbox') {
+        input = h('input', { type: 'checkbox', id, checked: field.defaultChecked ? value !== false : value === true });
+      } else if (field.type === 'month') {
+        // Native month picker; browsers without one show a text box that accepts YYYY-MM
+        input = h('input', {
+          class: 'input',
+          id,
+          type: 'month',
+          value: /^\d{4}-\d{2}/.test(String(value || '')) ? String(value).slice(0, 7) : '',
+          placeholder: 'YYYY-MM',
+          autocomplete: 'off'
+        });
       } else {
         input = h('input', {
           class: 'input',
@@ -931,11 +1086,25 @@
         update();
       }
 
+      const isCheck = field.type === 'switch' || field.type === 'checkbox';
       control = {
         focusTarget: () => input,
-        raw: () => (field.type === 'switch' ? input.checked : input.value),
+        raw: () => (isCheck ? input.checked : input.value),
+        /** Used by a "disables" checkbox, e.g. "I'm currently here" → end date. */
+        setDisabled(disabled) {
+          input.disabled = disabled;
+          wrapper.classList.toggle('is-disabled', disabled);
+          if (disabled) showError('');
+        },
         read() {
-          if (field.type === 'switch') return { value: input.checked };
+          if (isCheck) return { value: input.checked };
+          if (input.disabled) return { value: null };
+          if (field.type === 'month') {
+            const text = sanitizeText(input.value);
+            if (!text) return field.required ? { error: `Please fill in “${field.label}”.` } : { value: null };
+            if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(text)) return { error: 'Please choose a month and year (e.g. 2024-09).' };
+            return { value: `${text}-01` };
+          }
           if (field.type === 'select') {
             const ok = field.options.some((opt) => opt.value === input.value);
             return ok ? { value: input.value } : { error: 'Please choose an option.' };
@@ -967,7 +1136,7 @@
       wrapper.classList.toggle('has-error', Boolean(message));
     };
 
-    const label = field.type === 'switch'
+    const label = field.type === 'switch' || field.type === 'checkbox'
       ? null
       : h('label', { class: 'field__label', for: input ? id : null },
           field.label,
@@ -975,7 +1144,9 @@
 
     const main = field.type === 'switch'
       ? h('label', { class: 'switch', for: id }, input, h('span', { class: 'switch__track', 'aria-hidden': 'true' }), h('span', { class: 'switch__label' }, field.label))
-      : input || control.element;
+      : field.type === 'checkbox'
+        ? h('label', { class: 'check', for: id }, input, h('span', {}, field.label))
+        : input || control.element;
 
     const wrapper = h(
       'div',
@@ -989,7 +1160,7 @@
     // Clear the error as soon as the user edits the field
     wrapper.addEventListener('input', () => wrapper.classList.contains('has-error') && showError(''));
 
-    return { ...control, name: field.name, field, element: wrapper, showError };
+    return { ...control, name: field.name, field, input, element: wrapper, showError };
   }
 
   function createForm(fields, values = {}) {
@@ -1001,9 +1172,18 @@
         element.append(h('h3', { class: 'form-grid__heading' }, field.label));
         continue;
       }
-      const control = createControl(field, values[field.name]);
+      const control = createControl(field, values[field.name], values);
       controls.push(control);
       element.append(control.element);
+    }
+
+    // "Disables" checkboxes (e.g. "I'm currently here" greys out the end date)
+    for (const control of controls) {
+      const target = control.field.disables && controls.find((c) => c.name === control.field.disables);
+      if (!target?.setDisabled || !control.input) continue;
+      const sync = () => target.setDisabled(control.input.checked);
+      control.input.addEventListener('change', sync);
+      sync();
     }
 
     const snapshot = () => JSON.stringify(controls.map((c) => c.raw()));
@@ -1011,6 +1191,7 @@
 
     return {
       element,
+      control: (name) => controls.find((c) => c.name === name),
       isDirty: () => snapshot() !== initial,
       isBusy: () => controls.some((c) => c.isBusy?.()),
       collect() {
@@ -1182,7 +1363,8 @@
     { name: 'github', label: 'GitHub URL', type: 'url', max: LIMITS.profile.github, placeholder: 'https://github.com/…' },
     { type: 'heading', label: 'Files' },
     { name: 'photo_url', label: 'Profile photo', type: 'upload', kind: 'image', hint: 'Portrait, ideally 4:5 (e.g. 800 × 1000 px).' },
-    { name: 'cv_url', label: 'CV', type: 'upload', kind: 'pdf', hint: 'Used by both “Download CV” buttons.' }
+    { name: 'cv_url', label: 'CV', type: 'upload', kind: 'pdf', infoFields: { name: 'cv_file_name', date: 'cv_uploaded_at' },
+      hint: 'Used by both “Download CV” buttons. Replace uploads the new PDF and points the site to it when you save; the old file is then deleted.' }
   ];
 
   async function renderProfileView() {
@@ -1204,6 +1386,10 @@
       row = { ...(local?.profile || {}), photo_url: null, cv_url: null };
       if (Array.isArray(row.stats) === false) row.stats = [];
     }
+
+    // cv_file_name / cv_uploaded_at exist once the 2026-10-11 migration has run
+    const hasCvInfo = Boolean(row) && 'cv_file_name' in row;
+    let savedCvUrl = row.cv_url || null;
 
     profileForm = createForm(PROFILE_FIELDS, row);
     const saveBtn = h('button', { class: 'btn btn--primary', type: 'submit' }, 'Save changes');
@@ -1246,9 +1432,16 @@
         toast('Please fix the highlighted fields.', 'error');
         return;
       }
+      const values = { ...result.values };
+      if (hasCvInfo && values.cv_url !== savedCvUrl) {
+        const info = profileForm.control('cv_url')?.uploadInfo?.();
+        values.cv_file_name = values.cv_url ? info?.name || null : null;
+        values.cv_uploaded_at = values.cv_url ? info?.at || new Date().toISOString() : null;
+      }
       setBusy(saveBtn, true, 'Saving…');
       try {
-        await api.saveProfile(result.values);
+        await api.saveProfile(values);
+        savedCvUrl = values.cv_url || null;
         profileForm.markSaved();
         await profileForm.commitUploads();
         notice?.remove();
@@ -1265,7 +1458,117 @@
     refresh();
   }
 
-  // ---- Generic list view (Skills, Projects, Certificates) ----
+  // ---- Sections (show / hide whole sections; stored in profile.hidden_sections) ----
+  const SECTIONS = [
+    { key: 'skills', label: 'Skills', table: 'skills', icon: 'sparkles', auto: false },
+    { key: 'experience', label: 'Organization Experience', table: 'experience', icon: 'briefcase', auto: true },
+    { key: 'projects', label: 'Projects', table: 'projects', icon: 'folder', auto: false },
+    { key: 'education', label: 'Education', table: 'education', icon: 'graduation', auto: true },
+    { key: 'certifications', label: 'Certifications', table: 'certificates', icon: 'certificate', auto: true }
+  ];
+
+  async function renderSectionsView() {
+    setHeader('Sections', 'Show or hide whole sections of the public site. Hero, About and Contact are always shown. Backgrounds keep alternating black and white automatically.');
+    loadingState();
+
+    let profile;
+    let counts;
+    try {
+      [profile, counts] = await Promise.all([
+        api.profile(),
+        Promise.allSettled(SECTIONS.map((section) => api.list(section.table)))
+      ]);
+    } catch (error) {
+      errorState(error, renderSectionsView);
+      return;
+    }
+
+    const ready = Boolean(profile) && Array.isArray(profile.hidden_sections);
+    const notice = !profile
+      ? h('p', { class: 'notice' }, 'Save the Profile page once first — section settings are stored with your profile.')
+      : !ready
+        ? h('p', { class: 'notice' }, `Run ${MIGRATION_FILE} in the Supabase SQL Editor (see SETUP.md) to use these switches, then reload.`)
+        : null;
+    let hidden = new Set(ready ? profile.hidden_sections : []);
+    let busy = false;
+
+    const visibleCount = (i) => {
+      const result = counts[i];
+      if (result.status !== 'fulfilled') return null;
+      return result.value.filter((row) => row.is_visible !== false).length;
+    };
+
+    const buildRow = (section, i) => {
+      const shown = !hidden.has(section.key);
+      const count = visibleCount(i);
+      const empty = count === 0;
+      const sub = count === null
+        ? 'Entries could not be loaded.'
+        : section.auto && empty
+          ? 'No visible entries — hidden on the site automatically until you add one.'
+          : `${count} visible ${count === 1 ? 'entry' : 'entries'}`;
+      const input = h('input', {
+        type: 'checkbox',
+        class: 'switch__input',
+        role: 'switch',
+        checked: shown,
+        disabled: !ready,
+        'aria-label': `Show the ${section.label} section on the site`
+      });
+      input.addEventListener('change', async () => {
+        if (busy) {
+          input.checked = !input.checked;
+          return;
+        }
+        busy = true;
+        const next = new Set(hidden);
+        if (input.checked) next.delete(section.key);
+        else next.add(section.key);
+        try {
+          const saved = await api.update('profile', 1, { hidden_sections: SECTIONS.map((s) => s.key).filter((key) => next.has(key)) });
+          hidden = new Set(saved.hidden_sections || []);
+          toast(input.checked ? `${section.label} is now shown on the site.` : `${section.label} is now hidden from the site.`);
+          draw();
+          $(`[data-section-key="${section.key}"] .switch__input`, list)?.focus();
+        } catch (error) {
+          input.checked = !input.checked;
+          handleError(error);
+        } finally {
+          busy = false;
+        }
+      });
+
+      return h(
+        'li',
+        { class: `row${shown ? '' : ' is-hidden'}`, 'data-section-key': section.key },
+        h('div', { class: 'row__thumb', 'aria-hidden': 'true' }, icon(section.icon)),
+        h(
+          'div',
+          { class: 'row__main' },
+          h('p', { class: 'row__title' }, section.label, shown ? null : h('span', { class: 'badge' }, 'Hidden')),
+          h('p', { class: 'row__sub' }, sub)
+        ),
+        h(
+          'div',
+          { class: 'row__actions' },
+          h('label', { class: 'switch switch--compact' }, input, h('span', { class: 'switch__track', 'aria-hidden': 'true' }), h('span', { class: 'switch__label' }, shown ? 'Shown' : 'Hidden'))
+        )
+      );
+    };
+
+    const list = h('ul', { class: 'list', role: 'list' });
+    const draw = () => list.replaceChildren(...SECTIONS.map(buildRow));
+    draw();
+
+    root().replaceChildren(
+      ...[
+        notice,
+        h('div', { class: 'list-view' }, h('section', { class: 'card list-card' }, h('h2', { class: 'list-card__title' }, 'Public sections'), list))
+      ].filter(Boolean)
+    );
+  }
+
+  // ---- Generic list view (Skills, Experience, Projects, Education, Certificates) ----
   const groupKey = (value) => String(value ?? '').trim().toLowerCase();
 
   const LIST_CONFIG = {
@@ -1325,22 +1628,118 @@
         { name: 'is_visible', label: 'Visible on the site', type: 'switch', full: true }
       ]
     },
+    experience: {
+      title: 'Experience',
+      sub: 'Organization Experience timeline on the site. Order with the arrows (entries with the same position are shown newest first). The section is hidden when no entry is visible.',
+      noun: 'experience',
+      nounPlural: 'experience entries',
+      emptyText: 'No experience entries yet. The Organization Experience section stays hidden until you add a visible one.',
+      emptyIcon: 'briefcase',
+      fileFields: ['logo_url'],
+      sort: byOrderThenStart,
+      defaults: { is_current: false, show_months: true, bullets: [] },
+      titleOf: (row) => row.organization,
+      subOf: (row) => [
+        row.role,
+        periodText(formatMonth(row.start_date, row.show_months !== false), row.is_current ? 'Present' : formatMonth(row.end_date, row.show_months !== false))
+      ].filter(Boolean).join(' · '),
+      thumbOf: (row) => ({ src: row.logo_url, glyph: 'briefcase' }),
+      fields: () => [
+        { name: 'organization', label: 'Organization', type: 'text', max: LIMITS.experience.organization, required: true, full: true,
+          placeholder: 'e.g. BINUS Cyber Security Community' },
+        { name: 'role', label: 'Role', type: 'text', max: LIMITS.experience.role, placeholder: 'e.g. Media and Publication Activist' },
+        { name: 'location', label: 'Location', type: 'text', max: LIMITS.experience.location, placeholder: 'Optional, e.g. Jakarta' },
+        { type: 'heading', label: 'Period' },
+        { name: 'start_date', label: 'Start', type: 'month', hint: 'Month and year. Leave empty if you don\u2019t want to show a period.' },
+        { name: 'end_date', label: 'End', type: 'month', hint: 'Disabled while \u201cI\u2019m currently here\u201d is ticked.' },
+        { name: 'is_current', label: 'I\u2019m currently here (shows \u201cPresent\u201d)', type: 'checkbox', disables: 'end_date' },
+        { name: 'show_months', label: 'Show months (untick to show years only)', type: 'checkbox', defaultChecked: true },
+        { type: 'heading', label: 'Details' },
+        { name: 'bullets', label: 'Bullet points', type: 'bullets', full: true,
+          maxItems: LIMITS.experience.bullets, itemMax: LIMITS.experience.bullet,
+          hint: `2\u20134 short lines work best (max ${LIMITS.experience.bullets}). Use the arrows to reorder. Empty lines are ignored.` },
+        { name: 'logo_url', label: 'Logo', type: 'upload', kind: 'image', full: true,
+          hint: 'Optional. A square logo looks best (shown on a white tile). Without a logo the card shows the organization\u2019s initials.' },
+        { name: 'is_visible', label: 'Visible on the site', type: 'switch', full: true }
+      ],
+      prepare(data) {
+        if (data.is_current) data.end_date = null;
+        if (data.start_date && data.end_date && data.end_date < data.start_date) {
+          throw new Error('The end date is before the start date. Please check the period.');
+        }
+        return data;
+      }
+    },
+    education: {
+      title: 'Education',
+      sub: 'Cards in the Education section. Order with the arrows (entries with the same position are shown newest first). The section is hidden when no entry is visible.',
+      noun: 'education entry',
+      nounPlural: 'education entries',
+      emptyText: 'No education entries yet. The Education section stays hidden until you add a visible one.',
+      emptyIcon: 'graduation',
+      fileFields: ['logo_url'],
+      sort: byOrderThenStart,
+      defaults: { show_months: true },
+      titleOf: (row) => row.institution,
+      subOf: (row) => [
+        row.degree,
+        periodText(formatMonth(row.start_date, row.show_months !== false), row.end_label || formatMonth(row.end_date, row.show_months !== false))
+      ].filter(Boolean).join(' · '),
+      thumbOf: (row) => ({ src: row.logo_url, glyph: 'graduation' }),
+      fields: () => [
+        { name: 'institution', label: 'Institution', type: 'text', max: LIMITS.education.institution, required: true, full: true,
+          placeholder: 'e.g. BINUS University' },
+        { name: 'degree', label: 'Degree', type: 'text', max: LIMITS.education.degree, placeholder: 'Optional, e.g. Bachelor\u2019s Degree in Computer Science' },
+        { name: 'field_of_study', label: 'Field of study', type: 'text', max: LIMITS.education.field_of_study, placeholder: 'Optional, e.g. Cyber Security' },
+        { type: 'heading', label: 'Period' },
+        { name: 'start_date', label: 'Start', type: 'month', hint: 'Month and year.' },
+        { name: 'end_date', label: 'End', type: 'month', hint: 'Leave empty if you use the label below.' },
+        { name: 'end_label', label: 'End label', type: 'text', max: LIMITS.education.end_label, placeholder: 'e.g. Expected 2028',
+          hint: 'Optional. Shown instead of the end date.' },
+        { name: 'show_months', label: 'Show months (untick to show years only, e.g. 2021 \u2013 2024)', type: 'checkbox', defaultChecked: true },
+        { type: 'heading', label: 'Details' },
+        { name: 'gpa', label: 'GPA', type: 'text', max: LIMITS.education.gpa, placeholder: 'Optional, e.g. 3.44 / 4.00' },
+        { name: 'description', label: 'Short description', type: 'textarea', rows: 3, max: LIMITS.education.description, full: true,
+          hint: 'Optional, e.g. relevant coursework.' },
+        { name: 'logo_url', label: 'Logo', type: 'upload', kind: 'image', full: true,
+          hint: 'Optional. A square logo looks best (shown on a white tile). Without a logo the card shows the institution\u2019s initials.' },
+        { name: 'is_visible', label: 'Visible on the site', type: 'switch', full: true }
+      ],
+      prepare(data) {
+        if (data.start_date && data.end_date && data.end_date < data.start_date) {
+          throw new Error('The end date is before the start date. Please check the period.');
+        }
+        return data;
+      }
+    },
     certificates: {
       title: 'Certificates',
-      sub: 'Shown in the Education & Certificates section.',
+      sub: 'Badge cards in the Certifications section. Visitors can open the image full size. The section is hidden when no certificate is visible.',
       noun: 'certificate',
+      emptyText: 'No certificates yet. The Certifications section stays hidden until you add a visible one.',
+      emptyIcon: 'certificate',
       fileFields: ['image_url'],
       titleOf: (row) => row.title,
-      subOf: (row) => [row.issuer, formatDate(row.issued_date)].filter(Boolean).join(' · '),
+      subOf: (row) => [row.issuer, formatDate(row.issued_date), row.expiry_date ? `expires ${formatDate(row.expiry_date)}` : '']
+        .filter(Boolean).join(' · '),
       thumbOf: (row) => ({ src: row.image_url, glyph: 'certificate' }),
       fields: () => [
         { name: 'title', label: 'Title', type: 'text', max: LIMITS.certificates.title, required: true, full: true },
         { name: 'issuer', label: 'Issuer', type: 'text', max: LIMITS.certificates.issuer },
         { name: 'issued_date', label: 'Issued on', type: 'date' },
+        { name: 'expiry_date', label: 'Expires on', type: 'date', hint: 'Optional. Leave empty if it doesn\u2019t expire.' },
+        { name: 'credential_url', label: 'Credential URL', type: 'url', max: LIMITS.certificates.credential_url, full: true,
+          placeholder: 'https://…', hint: 'Optional. Shown as a \u201cShow credential\u201d button.' },
         { name: 'image_url', label: 'Certificate image', type: 'upload', kind: 'image', full: true,
-          hint: 'A clear scan or export of the certificate (landscape works best).' },
+          hint: 'A clear scan or export of the certificate (landscape works best). Without an image the card shows a placeholder.' },
         { name: 'is_visible', label: 'Visible on the site', type: 'switch', full: true }
-      ]
+      ],
+      prepare(data) {
+        if (data.issued_date && data.expiry_date && data.expiry_date < data.issued_date) {
+          throw new Error('The expiry date is before the issue date. Please check the dates.');
+        }
+        return data;
+      }
     }
   };
 
@@ -1372,14 +1771,15 @@
       errorState(error, () => renderListView(table));
       return;
     }
-    rows.sort(bySortOrder);
+    const sortRows = cfg.sort || bySortOrder;
+    rows.sort(sortRows);
 
     const container = h('div', { class: 'list-view' });
     let busy = false;
 
     // Group rows (skills by category, ordered like the public site)
     const groupsOf = () => {
-      if (!cfg.group) return [{ name: null, rows: rows.slice().sort(bySortOrder) }];
+      if (!cfg.group) return [{ name: null, rows: rows.slice().sort(sortRows) }];
       const order = (local?.skill_categories || []).map((c) => groupKey(c?.name));
       // Same rule as the public site: categories match case-insensitively, first spelling wins
       const map = new Map();
@@ -1491,12 +1891,15 @@
     const openEditor = (row = null) => {
       const isNew = !row;
       const firstGroup = groupsOf()[0]?.name;
-      const values = row ? { ...row } : { is_visible: true, category: table === 'projects' ? 'code' : firstGroup || '' };
+      const values = row
+        ? { ...row }
+        : { is_visible: true, category: table === 'projects' ? 'code' : firstGroup || '', ...(cfg.defaults || {}) };
       editor.open({
         title: isNew ? `Add ${cfg.noun}` : `Edit ${cfg.noun}`,
         fields: cfg.fields(),
         values,
         onSave: async (data) => {
+          if (cfg.prepare) data = cfg.prepare(data);
           if (cfg.categoryNames && typeof data.category === 'string') data.category = canonicalCategory(data.category);
           if (isNew) {
             data.sort_order = nextOrder(cfg.group ? data.category : null);
@@ -1556,8 +1959,8 @@
       if (!rows.length) {
         container.replaceChildren(
           h('div', { class: 'state' },
-            h('span', { class: 'state__icon', 'aria-hidden': 'true' }, icon(table === 'certificates' ? 'certificate' : 'sparkles')),
-            h('p', {}, `No ${cfg.noun}s yet. The public site shows the built-in content from data.json until you add some.`),
+            h('span', { class: 'state__icon', 'aria-hidden': 'true' }, icon(cfg.emptyIcon || 'sparkles')),
+            h('p', {}, cfg.emptyText || `No ${cfg.nounPlural || `${cfg.noun}s`} yet. The public site shows the built-in content from data.json until you add some.`),
             h('button', { class: 'btn btn--primary', type: 'button', onclick: () => openEditor() }, icon('plus'), `Add ${cfg.noun}`)),
           cfg.datalist ? cfg.datalist(rows, local) : null
         );
@@ -1583,8 +1986,12 @@
 
   // ---- Files ----
   async function renderFilesView() {
-    setHeader('Files', 'Everything stored in the “portfolio-assets” bucket. Upload files from the Profile, Skills, Projects and Certificates pages.');
+    setHeader('Files', 'Everything stored in the “portfolio-assets” bucket. Upload files from the Profile, Skills, Experience, Projects, Education and Certificates pages.');
     loadingState();
+
+    // Experience / Education may not exist yet (migration not run): treat them as empty.
+    // Any other error stops the page, so a used file is never reported as "unused".
+    const optionalList = (table) => api.list(table).catch((error) => (error?.missingTable ? [] : Promise.reject(error)));
 
     let images;
     let docs;
@@ -1592,14 +1999,18 @@
     let skills;
     let projects;
     let certificates;
+    let experience;
+    let education;
     try {
-      [images, docs, profile, skills, projects, certificates] = await Promise.all([
+      [images, docs, profile, skills, projects, certificates, experience, education] = await Promise.all([
         listFolder('images'),
         listFolder('docs'),
         api.profile(),
         api.list('skills'),
         api.list('projects'),
-        api.list('certificates')
+        api.list('certificates'),
+        optionalList('experience'),
+        optionalList('education')
       ]);
     } catch (error) {
       errorState(error, renderFilesView);
@@ -1624,6 +2035,8 @@
       note(r.doc_url, { table: 'projects', id: r.id, field: 'doc_url', label: `Project “${r.title}” document` });
     });
     certificates.forEach((r) => note(r.image_url, { table: 'certificates', id: r.id, field: 'image_url', label: `Certificate “${r.title}” image` }));
+    experience.forEach((r) => note(r.logo_url, { table: 'experience', id: r.id, field: 'logo_url', label: `Experience “${r.organization}” logo` }));
+    education.forEach((r) => note(r.logo_url, { table: 'education', id: r.id, field: 'logo_url', label: `Education “${r.institution}” logo` }));
 
     const clearRefs = async (refs) => {
       for (const ref of refs) {
@@ -1668,7 +2081,7 @@
       else toast(`${plural(unused.length, 'file')} deleted.`);
       renderFilesView();
     });
-    setHeader('Files', 'Everything stored in the “portfolio-assets” bucket. Upload files from the Profile, Skills, Projects and Certificates pages.', [cleanupBtn]);
+    setHeader('Files', 'Everything stored in the “portfolio-assets” bucket. Upload files from the Profile, Skills, Experience, Projects, Education and Certificates pages.', [cleanupBtn]);
 
     const fileCard = (file) => {
       const url = publicUrl(file.path);
@@ -1736,8 +2149,11 @@
      ------------------------------------------------------------------------ */
   const VIEWS = {
     profile: { label: 'Profile', icon: 'user', render: renderProfileView },
+    sections: { label: 'Sections', icon: 'layout', render: renderSectionsView },
     skills: { label: 'Skills', icon: 'sparkles', render: () => renderListView('skills') },
+    experience: { label: 'Experience', icon: 'briefcase', render: () => renderListView('experience') },
     projects: { label: 'Projects', icon: 'folder', render: () => renderListView('projects') },
+    education: { label: 'Education', icon: 'graduation', render: () => renderListView('education') },
     certificates: { label: 'Certificates', icon: 'certificate', render: () => renderListView('certificates') },
     files: { label: 'Files', icon: 'files', render: renderFilesView }
   };

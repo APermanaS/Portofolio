@@ -12,8 +12,10 @@
    7. Skills
    8. Projects + project modal
    9. Dialog plumbing (shared by all modals)
-   10. Certificates + image modal
-   11. Boot
+   10. Organization Experience + Education
+   11. Certifications + image modal
+   12. Section visibility (hide empty / switched-off sections, keep black/white alternation)
+   13. Boot
 
    SECURITY: all database text is inserted with textContent / text nodes.
    innerHTML is only used for the trusted, hard-coded SVG icons below.
@@ -112,6 +114,24 @@
       );
   }
 
+  /** "2024-09-01" → "September 2024" (or "2024" when months are switched off) */
+  function formatMonth(value, showMonths = true) {
+    const match = /^(\d{4})-(\d{2})/.exec(String(value || ''));
+    if (!match) return '';
+    if (!showMonths) return match[1];
+    const date = new Date(Date.UTC(+match[1], +match[2] - 1, 1));
+    return date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  }
+
+  /** "September 2024 – Expected 2028"; either side may be missing. */
+  const periodText = (start, end) => [start, end].filter(Boolean).join(' \u2013 ');
+
+  /** sort_order first, then the most recent start date, then id. */
+  const byOrderThenStart = (a, b) =>
+    (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0) ||
+    String(b.start_date || '').localeCompare(String(a.start_date || '')) ||
+    (Number(a.id) || 0) - (Number(b.id) || 0);
+
   /** "2026-09-25" → "25 September 2026" */
   function formatDate(value) {
     const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ''));
@@ -128,6 +148,7 @@
     code: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 7L3.5 12l5 5M15.5 7l5 5-5 5M13.5 4.5l-3 15"/></svg>',
     document: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2.5h8l4.5 4.5v14.5H6z"/><path d="M14 2.5V7h4.5M9 12h6.5M9 15.5h6.5M9 9h3"/></svg>',
     image: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.75"/><path d="M21 16l-5-5-8 9"/></svg>',
+    seal: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="5.5"/><path d="M9.5 9l1.75 1.75L14.75 7.5M8.5 13.5L7 21l5-2.5 5 2.5-1.5-7.5"/></svg>',
     certificate: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M7 9h10M7 12.5h6"/><circle cx="17" cy="17" r="2.5"/><path d="M15.5 19l-.5 3 2-1 2 1-.5-3"/></svg>'
   };
 
@@ -157,6 +178,14 @@
       );
     }
     return existenceCache.get(url);
+  }
+
+  /** Replace children; keep them shown if the container was already revealed (no re-animation). */
+  function replaceRevealing(container, nodes) {
+    const wasVisible = Boolean($('.reveal.is-visible', container));
+    container.replaceChildren(...nodes);
+    if (wasVisible) nodes.forEach((node) => node.classList?.contains('reveal') && node.classList.add('is-visible'));
+    observeReveal(container);
   }
 
   /**
@@ -303,11 +332,26 @@
   const REMOTE_TIMEOUT_MS = 6000;
 
   const COLUMNS = {
-    profile: 'name, tagline, subtagline, about_text, stats, email, linkedin, github, photo_url, cv_url',
+    profile: 'name, tagline, subtagline, about_text, stats, email, linkedin, github, photo_url, cv_url, hidden_sections',
     skills: 'id, category, name, level, icon_url, sort_order',
     projects: 'id, title, category, short_desc, detail_desc, role, tools, result, period, repo_url, image_url, doc_url, sort_order',
+    experience: 'id, organization, role, location, start_date, end_date, is_current, show_months, bullets, logo_url, sort_order',
+    education: 'id, institution, degree, field_of_study, start_date, end_date, end_label, gpa, description, logo_url, show_months, sort_order',
+    certificates: 'id, title, issuer, issued_date, expiry_date, credential_url, image_url, sort_order'
+  };
+
+  /** Columns from before the 2026-10-11 migration: used if the new columns don't exist yet. */
+  const LEGACY_COLUMNS = {
+    profile: 'name, tagline, subtagline, about_text, stats, email, linkedin, github, photo_url, cv_url',
     certificates: 'id, title, issuer, issued_date, image_url, sort_order'
   };
+
+  /**
+   * Tables whose (possibly empty) result is used as-is, so hiding or deleting every
+   * entry in the admin hides the section. data.json is only used when the table
+   * can't be read at all (not configured, unreachable, or migration not run yet).
+   */
+  const AUTHORITATIVE = new Set(['experience', 'education', 'certificates']);
 
   function supabaseConfig() {
     const cfg = window.PORTFOLIO_CONFIG || {};
@@ -329,12 +373,21 @@
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REMOTE_TIMEOUT_MS);
 
-    const query = (table) => {
-      let builder = client.from(table).select(COLUMNS[table]);
-      builder = table === 'profile'
-        ? builder.limit(1)
-        : builder.eq('is_visible', true).order('sort_order', { ascending: true }).order('id', { ascending: true });
-      return builder.abortSignal(controller.signal);
+    const build = (table, columns) => {
+      let builder = client.from(table).select(columns);
+      if (table === 'profile') return builder.limit(1).abortSignal(controller.signal);
+      builder = builder.eq('is_visible', true).order('sort_order', { ascending: true });
+      if (table === 'experience' || table === 'education') {
+        builder = builder.order('start_date', { ascending: false, nullsFirst: false });
+      }
+      return builder.order('id', { ascending: true }).abortSignal(controller.signal);
+    };
+
+    // Retry with the old column list when the new columns are missing (migration not run yet)
+    const query = async (table) => {
+      const result = await build(table, COLUMNS[table]);
+      if (result.error && LEGACY_COLUMNS[table] && !controller.signal.aborted) return build(table, LEGACY_COLUMNS[table]);
+      return result;
     };
 
     const tables = Object.keys(COLUMNS);
@@ -367,7 +420,7 @@
 
     const pick = (table) => {
       const rows = remote[table];
-      if (Array.isArray(rows) && rows.length) return { rows, source: 'remote' };
+      if (Array.isArray(rows) && (rows.length || AUTHORITATIVE.has(table))) return { rows, source: 'remote' };
       const fallback = table === 'profile' ? (local?.profile ? [local.profile] : null) : local?.[table];
       return { rows: Array.isArray(fallback) ? fallback : null, source: 'local' };
     };
@@ -377,6 +430,8 @@
       profile: pick('profile'),
       skills: pick('skills'),
       projects: pick('projects'),
+      experience: pick('experience'),
+      education: pick('education'),
       certificates: pick('certificates'),
       categories: Array.isArray(local?.skill_categories) ? local.skill_categories : []
     };
@@ -1059,21 +1114,146 @@
 
 
   /* ------------------------------------------------------------------------
-     10. Certificates + image modal
+     10. Organization Experience + Education
+     ------------------------------------------------------------------------ */
+
+  /** Uploaded logo, or a monogram tile when there is none or it fails to load. */
+  function buildLogo(rawUrl, name) {
+    const tile = h('span', { class: 'logo-tile', 'aria-hidden': 'true' });
+    const mark = () => {
+      tile.classList.remove('logo-tile--image');
+      tile.replaceChildren(h('span', { class: 'logo-tile__mark' }, monogram(name)));
+    };
+    const src = safeUrl(rawUrl);
+    if (!src) {
+      mark();
+      return tile;
+    }
+    const img = h('img', { alt: '', width: 56, height: 56, loading: 'lazy', decoding: 'async' });
+    tile.classList.add('logo-tile--image');
+    tile.append(img);
+    bindImage(img, mark);
+    img.src = src;
+    return tile;
+  }
+
+  /** bullets is a jsonb array of strings; anything else is ignored. */
+  const bulletList = (value) =>
+    (Array.isArray(value) ? value : []).filter((item) => typeof item === 'string' && isFilled(item)).map(clean).slice(0, 8);
+
+  function buildExperienceItem(entry) {
+    const organization = clean(entry.organization);
+    const role = clean(entry.role);
+    const location = clean(entry.location);
+    const showMonths = entry.show_months !== false;
+    const current = entry.is_current === true;
+    const start = formatMonth(entry.start_date, showMonths);
+    const end = current ? 'Present' : formatMonth(entry.end_date, showMonths);
+    const period = periodText(start, end);
+    const bullets = bulletList(entry.bullets);
+
+    const chips = [
+      period ? h('span', { class: `xp-chip${current ? ' xp-chip--now' : ''}` }, period) : null,
+      location ? h('span', { class: 'xp-chip' }, location) : null
+    ].filter(Boolean);
+
+    return h(
+      'li',
+      { class: `xp-item reveal${current ? ' is-current' : ''}` },
+      h('span', { class: 'xp-item__dot', 'aria-hidden': 'true' }),
+      h(
+        'article',
+        { class: 'xp-card' },
+        h(
+          'header',
+          { class: 'xp-card__head' },
+          buildLogo(entry.logo_url, organization),
+          h(
+            'div',
+            { class: 'xp-card__titles' },
+            h('h3', { class: 'xp-card__org' }, organization),
+            role ? h('p', { class: 'xp-card__role' }, role) : null
+          )
+        ),
+        chips.length ? h('p', { class: 'xp-card__meta' }, chips) : null,
+        bullets.length ? h('ul', { class: 'xp-card__bullets', role: 'list' }, bullets.map((text) => h('li', {}, text))) : null
+      )
+    );
+  }
+
+  /** Returns the number of entries shown (0 → the section is hidden). */
+  function renderExperience({ rows }) {
+    const root = $('#experience-root');
+    if (!root) return 0;
+    const entries = (rows || [])
+      .filter((row) => row?.is_visible !== false && isFilled(row?.organization))
+      .sort(byOrderThenStart);
+    replaceRevealing(root, entries.map(buildExperienceItem));
+    return entries.length;
+  }
+
+  function buildEducationCard(entry) {
+    const institution = clean(entry.institution);
+    const showMonths = entry.show_months !== false;
+    const start = formatMonth(entry.start_date, showMonths);
+    const end = clean(entry.end_label) || formatMonth(entry.end_date, showMonths);
+    const period = periodText(start, end);
+    const degree = clean(entry.degree);
+    const field = clean(entry.field_of_study);
+    const gpa = clean(entry.gpa);
+    const description = clean(entry.description);
+
+    // .reveal sits on a wrapper so it never fights the card's hover transform
+    const card = h(
+      'article',
+      { class: 'edu-card' },
+      h(
+        'div',
+        { class: 'edu-card__top' },
+        buildLogo(entry.logo_url, institution),
+        period ? h('p', { class: 'edu-card__period' }, period) : null
+      ),
+      h('h3', { class: 'edu-card__institution' }, institution),
+      degree ? h('p', { class: 'edu-card__degree' }, degree) : null,
+      field ? h('p', { class: 'edu-card__field' }, field) : null,
+      gpa ? h('dl', { class: 'edu-card__facts' }, h('div', {}, h('dt', {}, 'GPA'), h('dd', {}, gpa))) : null,
+      description ? h('p', { class: 'edu-card__desc' }, ...withBreaks(description)) : null
+    );
+    return h('div', { class: 'edu-item reveal' }, card);
+  }
+
+  function renderEducation({ rows }) {
+    const root = $('#education-root');
+    if (!root) return 0;
+    const entries = (rows || [])
+      .filter((row) => row?.is_visible !== false && isFilled(row?.institution))
+      .sort(byOrderThenStart);
+    replaceRevealing(root, entries.map(buildEducationCard));
+    return entries.length;
+  }
+
+
+  /* ------------------------------------------------------------------------
+     11. Certifications + image modal
      ------------------------------------------------------------------------ */
   function certPlaceholder() {
     return h(
       'div',
       { class: 'cert-card__media cert-card__media--empty' },
-      placeholder({ variant: 'dark', glyph: 'certificate', note: 'Image coming soon' })
+      placeholder({ variant: 'auto', glyph: 'certificate', note: 'Image coming soon' })
     );
   }
+
+  const todayIso = () => new Date().toISOString().slice(0, 10);
 
   function buildCertCard(cert, modal) {
     const title = clean(cert.title);
     const issuer = clean(cert.issuer);
     const issued = formatDate(cert.issued_date);
+    const expiry = formatDate(cert.expiry_date);
+    const expired = Boolean(expiry) && String(cert.expiry_date).slice(0, 10) < todayIso();
     const src = safeUrl(cert.image_url);
+    const credential = safeUrl(cert.credential_url);
     const alt = [title, issuer && `certificate issued by ${issuer}`, issued && `on ${issued}`].filter(Boolean).join(' ');
 
     let media;
@@ -1103,41 +1283,81 @@
     }
 
     const meta = [
-      issuer ? h('div', {}, h('dt', {}, 'Issuer'), h('dd', {}, issuer)) : null,
-      issued ? h('div', {}, h('dt', {}, 'Issued'), h('dd', {}, issued)) : null
+      issued ? h('div', {}, h('dt', {}, 'Issued'), h('dd', {}, issued)) : null,
+      expiry ? h('div', {}, h('dt', {}, expired ? 'Expired' : 'Expires'), h('dd', {}, expiry)) : null
     ].filter(Boolean);
 
-    return h(
+    // Only https links become a "Show credential" button
+    const link = /^https:/.test(credential)
+      ? h(
+          'a',
+          { class: 'cert-card__link', href: credential, target: '_blank', rel: 'noopener noreferrer' },
+          'Show credential',
+          icon('external'),
+          h('span', { class: 'visually-hidden' }, ' (opens in a new tab)')
+        )
+      : null;
+
+    const card = h(
       'article',
       { class: 'cert-card' },
       media,
       h(
         'div',
         { class: 'cert-card__body' },
-        h('h4', { class: 'cert-card__title' }, title),
-        meta.length ? h('dl', { class: 'cert-card__meta' }, meta) : null
+        h('span', { class: 'cert-card__seal', 'aria-hidden': 'true' }, icon('seal')),
+        h('h3', { class: 'cert-card__title' }, title),
+        issuer ? h('p', { class: 'cert-card__issuer' }, issuer) : null,
+        meta.length ? h('dl', { class: 'cert-card__meta' }, meta) : null,
+        link
       )
     );
+    return h('div', { class: 'cert-item reveal' }, card);
   }
 
   function renderCertificates({ rows }) {
     const root = $('#cert-root');
     const modal = $('#image-modal');
-    if (!root || !modal) return;
-    if (!rows) {
-      root.replaceChildren(loadError('Certificates'));
-      return;
-    }
-
-    const certs = rows.filter((c) => isFilled(c?.title)).sort(bySortOrder);
-    const heading = $('[data-cert-heading]');
-    if (heading) heading.textContent = certs.length > 1 ? 'Certificates' : 'Certificate';
-    root.replaceChildren(...certs.map((cert) => buildCertCard(cert, modal)));
+    if (!root || !modal) return 0;
+    const certs = (rows || []).filter((c) => c?.is_visible !== false && isFilled(c?.title)).sort(bySortOrder);
+    root.dataset.count = String(Math.min(certs.length, 3));
+    replaceRevealing(root, certs.map((cert) => buildCertCard(cert, modal)));
+    return certs.length;
   }
 
 
   /* ------------------------------------------------------------------------
-     11. Boot
+     12. Section visibility
+         A section is hidden (with its nav link) when it is switched off in
+         Admin → Sections (profile.hidden_sections) or has no visible entries.
+         Sections marked data-theme="auto" are then re-striped so the page
+         keeps alternating black / white.
+     ------------------------------------------------------------------------ */
+  const SECTION_KEYS = ['skills', 'experience', 'projects', 'education', 'certifications'];
+
+  function applySectionVisibility(hiddenKeys) {
+    for (const key of SECTION_KEYS) {
+      const hidden = hiddenKeys.has(key);
+      const section = $(`main > section[data-section="${key}"]`);
+      if (section) section.hidden = hidden;
+      $$(`[data-nav="${key}"]`).forEach((item) => {
+        item.hidden = hidden;
+      });
+    }
+
+    const visible = $$('main > section[id]').filter((section) => !section.hidden);
+    visible.forEach((section, index) => {
+      if (section.dataset.theme !== 'auto') return;
+      const dark = index % 2 === 0; // hero (index 0) is black
+      const light = section.id === 'contact' ? 'section--white' : 'section--light';
+      section.classList.remove('section--dark', 'section--light', 'section--white');
+      section.classList.add(dark ? 'section--dark' : light);
+    });
+  }
+
+
+  /* ------------------------------------------------------------------------
+     13. Boot
      ------------------------------------------------------------------------ */
   function initYear() {
     const year = String(new Date().getFullYear());
@@ -1152,22 +1372,36 @@
       content = await loadContent();
     } catch (error) {
       console.warn(error);
-      content = { profile: { rows: null }, skills: { rows: null }, projects: { rows: null }, certificates: { rows: null }, categories: [] };
+      const none = { rows: null };
+      content = { profile: none, skills: none, projects: none, experience: none, education: none, certificates: none, categories: [] };
     }
 
     // Each renderer is isolated: one failing section never blanks the others.
     const run = (label, fn) => {
       try {
-        fn();
+        return fn();
       } catch (error) {
         console.error(`${label} failed to render`, error);
+        return undefined;
       }
     };
 
-    run('Profile', () => renderProfile(content.profile.rows?.[0]));
+    const profile = content.profile.rows?.[0];
+    run('Profile', () => renderProfile(profile));
     run('Skills', () => renderSkills(content.skills, content.categories));
     run('Projects', () => renderProjects(content.projects));
-    run('Certificates', () => renderCertificates(content.certificates));
+    const counts = {
+      experience: run('Experience', () => renderExperience(content.experience)),
+      education: run('Education', () => renderEducation(content.education)),
+      certifications: run('Certifications', () => renderCertificates(content.certificates))
+    };
+
+    const hidden = new Set(
+      (Array.isArray(profile?.hidden_sections) ? profile.hidden_sections : []).filter((key) => SECTION_KEYS.includes(key))
+    );
+    // Empty sections disappear; a renderer that crashed (undefined) keeps its static content.
+    Object.entries(counts).forEach(([key, count]) => count === 0 && hidden.add(key));
+    run('Sections', () => applySectionVisibility(hidden));
   }
 
   function init() {
