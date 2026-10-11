@@ -39,6 +39,8 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="config.js" defer></script>
   <script src="script.js" defer></script>
+  <!-- Hero background only (independent of content loading) -->
+  <script src="hero-meteors.js" defer></script>
 
   <script type="application/ld+json">
   {
@@ -84,7 +86,9 @@
 
     <!-- ============ Hero (signature: animated gradient key word) ============ -->
     <section id="hero" class="hero section section--dark" aria-labelledby="hero-title">
-      <div class="hero__glow" aria-hidden="true"></div>
+      <!-- Meteor shower background: drawn by hero-meteors.js; CSS gradient fallback on .hero -->
+      <canvas class="hero__meteors" aria-hidden="true"></canvas>
+      <div class="hero__vignette" aria-hidden="true"></div>
       <div class="container hero__inner">
         <h1 id="hero-title" class="hero__title">
           <span class="hero__name hero-intro">Andhika Permana Sagiyono</span>

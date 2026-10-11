@@ -36,3 +36,10 @@ Change Log
   Projects, Certificates, Files, uploads with preview and progress). Certificates are rendered from data
   (#cert-root). Visual design unchanged; small additions in style.css §16b for the "coming soon" states.
   projects.json and skills.json are no longer read by the site (data.json replaces them).
+- 2026-10-11 · Hero · Replaced the horizon glow (.hero__glow) with an animated meteor shower on pure black:
+  new hero-meteors.js (single 2D canvas .hero__meteors, aria-hidden, CONFIG object at the top for colours,
+  counts, angle, speeds). Diagonal streaks at ~37° in #0a84ff / #64d2ff / #bf5af2 with bright heads, depth
+  parallax, tiny twinkling stars. Pauses when the tab is hidden or hero is offscreen; DPR capped at 2;
+  prefers-reduced-motion draws one static frame. Readability: .hero__vignette radial overlay, streaks dimmed
+  behind the text, soft shadow on .hero__sub. Static CSS gradient on .hero when canvas/JS is unavailable.
+  Exception to "CSS/SVG only" decorations: canvas explicitly requested for this effect. Headline unchanged.
