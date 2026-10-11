@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <!-- Only our own files, the pinned supabase-js CDN file, Google Fonts and the Supabase API may load.
+       If you use a custom Supabase domain, add it to img-src and connect-src. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="light">
+  <title>Admin — Portfolio</title>
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%230a84ff'/%3E%3Cstop offset='.5' stop-color='%23bf5af2'/%3E%3Cstop offset='1' stop-color='%23ff375f'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='%23000'/%3E%3Ctext x='32' y='42' font-family='Inter,Arial,sans-serif' font-size='28' font-weight='700' text-anchor='middle' fill='url(%23g)'%3EAP%3C/text%3E%3C/svg%3E">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&amp;display=swap">
+  <link rel="stylesheet" href="admin.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="config.js" defer></script>
+  <script src="admin.js" defer></script>
+</head>
+<body>
+  <noscript><p class="noscript">The admin panel needs JavaScript.</p></noscript>
+
+  <!-- Shown while the session is being checked -->
+  <div id="boot-view" class="boot" role="status" aria-live="polite">
+    <span class="spinner" aria-hidden="true"></span>
+    <span class="visually-hidden">Loading…</span>
+  </div>
+
+  <!-- ============ Setup missing ============ -->
+  <main id="config-view" class="auth" hidden>
+    <div class="auth__glow" aria-hidden="true"></div>
+    <section class="auth__card" aria-labelledby="config-title">
+      <div class="auth__logo" aria-hidden="true">AP</div>
+      <h1 id="config-title" class="auth__title">Almost there</h1>
+      <p class="auth__sub" id="config-message">Supabase is not configured yet. Fill in config.js with your Project URL and public anon key (see SETUP.md), then reload this page.</p>
+    </section>
+  </main>
+
+  <!-- ============ Login (no sign-up) ============ -->
+  <main id="login-view" class="auth" hidden>
+    <div class="auth__glow" aria-hidden="true"></div>
+    <form id="login-form" class="auth__card" novalidate aria-labelledby="login-title">
+      <div class="auth__logo" aria-hidden="true">AP</div>
+      <h1 id="login-title" class="auth__title">Admin sign in</h1>
+      <p class="auth__sub">Manage the content of your portfolio.</p>
+
+      <p id="login-notice" class="notice" role="status" hidden></p>
+
+      <div class="field">
+        <label class="field__label" for="login-email">Email</label>
+        <input class="input" id="login-email" name="email" type="email" autocomplete="username" inputmode="email" maxlength="254" required>
+      </div>
+      <div class="field">
+        <label class="field__label" for="login-password">Password</label>
+        <input class="input" id="login-password" name="password" type="password" autocomplete="current-password" maxlength="128" required>
+      </div>
+
+      <p id="login-error" class="field__error" role="alert" hidden></p>
+
+      <button class="btn btn--primary btn--block" type="submit" id="login-submit">Sign in</button>
+    </form>
+  </main>
+
+  <!-- ============ App ============ -->
+  <div id="app-view" class="app" hidden>
+    <aside class="sidebar" aria-label="Admin">
+      <div class="sidebar__brand">
+        <span class="sidebar__logo" aria-hidden="true">AP</span>
+        <span>Portfolio Admin</span>
+      </div>
+      <nav class="sidebar__nav" aria-label="Sections">
+        <ul role="list" id="sidebar-list"></ul>
+      </nav>
+      <div class="sidebar__footer">
+        <p class="sidebar__user" id="user-email"></p>
+        <button class="btn btn--ghost-dark btn--small" type="button" id="logout-btn">Log out</button>
+      </div>
+    </aside>
+
+    <main class="main" id="main" tabindex="-1">
+      <header class="main__header">
+        <div>
+          <h1 class="main__title" id="view-title"></h1>
+          <p class="main__sub" id="view-sub"></p>
+        </div>
+        <div class="main__actions" id="view-actions"></div>
+      </header>
+      <div id="view-root" class="view"></div>
+    </main>
+  </div>
+
+  <!-- Editor side panel (add / edit) -->
+  <dialog id="editor" class="sheet" aria-labelledby="editor-title">
+    <form class="sheet__form" id="editor-form" novalidate>
+      <header class="sheet__header">
+        <h2 class="sheet__title" id="editor-title"></h2>
+        <button class="icon-btn" type="button" data-action="close" aria-label="Close"></button>
+      </header>
+      <div class="sheet__body" id="editor-body"></div>
+      <footer class="sheet__footer">
+        <span class="sheet__status" id="editor-status" aria-live="polite"></span>
+        <button class="btn btn--secondary" type="button" data-action="close">Cancel</button>
+        <button class="btn btn--primary" type="submit" id="editor-save">Save</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Confirm dialog -->
+  <dialog id="confirm" class="confirm" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+    <div class="confirm__form">
+      <h2 class="confirm__title" id="confirm-title"></h2>
+      <div class="confirm__message" id="confirm-message"></div>
+      <div class="confirm__extra" id="confirm-extra"></div>
+      <div class="confirm__actions">
+        <button class="btn btn--secondary" type="button" id="confirm-cancel">Cancel</button>
+        <button class="btn btn--danger" type="button" id="confirm-ok">OK</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div class="toasts" id="toasts" aria-live="polite" aria-relevant="additions"></div>
+</body>
+</html>

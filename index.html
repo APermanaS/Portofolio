@@ -33,7 +33,14 @@
 
   <!-- Flag JS early so reveal animations never flash or hide content without JS -->
   <script>document.documentElement.classList.add('js');</script>
+  <!-- Content: supabase-js (exact pinned version) → config.js (public URL + anon key) → script.js.
+       All deferred, so they run in this order after parsing. If Supabase is not configured or
+       unreachable, script.js falls back to data.json. -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="config.js" defer></script>
   <script src="script.js" defer></script>
+  <!-- Hero background only (independent of content loading) -->
+  <script src="hero-meteors.js" defer></script>
 
   <script type="application/ld+json">
   {
@@ -69,7 +76,7 @@
         <li><a class="nav__link" href="#certificate">Certificate</a></li>
         <li><a class="nav__link" href="#contact">Contact</a></li>
         <li class="nav__cta-item">
-          <a class="btn btn--light btn--small" href="assets/CV.pdf" download="Andhika-Permana-Sagiyono-CV.pdf">Download CV</a>
+          <a class="btn btn--light btn--small" href="assets/CV.pdf" download="Andhika-Permana-Sagiyono-CV.pdf" data-cv>Download CV</a>
         </li>
       </ul>
     </nav>
@@ -79,7 +86,9 @@
 
     <!-- ============ Hero (signature: animated gradient key word) ============ -->
     <section id="hero" class="hero section section--dark" aria-labelledby="hero-title">
-      <div class="hero__glow" aria-hidden="true"></div>
+      <!-- Meteor shower background: drawn by hero-meteors.js; CSS gradient fallback on .hero -->
+      <canvas class="hero__meteors" aria-hidden="true"></canvas>
+      <div class="hero__vignette" aria-hidden="true"></div>
       <div class="container hero__inner">
         <h1 id="hero-title" class="hero__title">
           <span class="hero__name hero-intro">Andhika Permana Sagiyono</span>
@@ -87,7 +96,7 @@
         </h1>
         <p class="hero__sub hero-intro hero-intro--d2">Cyber Security student at BINUS University, open to Cyber Security and Software Engineering internships.</p>
         <div class="hero__actions hero-intro hero-intro--d3">
-          <a class="btn btn--light" href="assets/CV.pdf" download="Andhika-Permana-Sagiyono-CV.pdf">Download CV</a>
+          <a class="btn btn--light" href="assets/CV.pdf" download="Andhika-Permana-Sagiyono-CV.pdf" data-cv>Download CV</a>
           <a class="btn btn--outline-dark" href="#projects">View projects</a>
         </div>
       </div>
@@ -99,8 +108,8 @@
         <h2 id="about-title" class="section-title reveal">About</h2>
 
         <div class="about__grid">
-          <!-- Set data-photo-src to a portrait (e.g. assets/profile.jpg) to replace the placeholder. -->
-          <figure class="about__photo reveal" data-photo-src="" data-photo-alt="Portrait of Andhika Permana Sagiyono">
+          <!-- The portrait comes from profile.photo_url (admin panel); the initials placeholder shows until then. -->
+          <figure class="about__photo reveal">
             <div class="photo-placeholder" role="img" aria-label="Andhika Permana Sagiyono">
               <span class="photo-placeholder__initials" aria-hidden="true">AP</span>
             </div>
@@ -140,7 +149,7 @@
         <h2 id="skills-title" class="section-title reveal">Skills</h2>
       </div>
 
-      <!-- Rendered from skills.json by script.js -->
+      <!-- Rendered from the skills table (fallback: data.json) by script.js -->
       <div id="skills-root" class="skills__root">
         <noscript><p class="container load-error">Enable JavaScript to view the skills list.</p></noscript>
       </div>
@@ -161,7 +170,7 @@
           </div>
         </div>
 
-        <!-- Rendered from projects.json by script.js -->
+        <!-- Rendered from the projects table (fallback: data.json) by script.js -->
         <div id="projects-root" class="projects-grid reveal">
           <noscript><p class="load-error">Enable JavaScript to view the projects.</p></noscript>
         </div>
@@ -196,19 +205,19 @@
           </div>
 
           <div class="edu__col">
-            <h3 class="subsection-title reveal">Certificate</h3>
-            <div class="reveal">
+            <h3 class="subsection-title reveal" data-cert-heading>Certificate</h3>
+            <!-- Rendered from the certificates table (or data.json) by script.js; static card = no-JS fallback -->
+            <div class="reveal cert-list" id="cert-root">
             <article class="cert-card">
-              <button class="cert-card__media" type="button" id="cert-trigger" aria-haspopup="dialog"
-                      data-full="assets/certificate.jpg"
-                      aria-label="View ISO/IEC 27001:2022 Information Security Associate certificate full size">
-                <img src="assets/certificate-thumb.jpg" width="880" height="623" loading="lazy" decoding="async"
+              <a class="cert-card__media" href="assets/certificate.jpg" target="_blank" rel="noopener noreferrer"
+                 aria-label="View ISO/IEC 27001:2022 Information Security Associate certificate full size">
+                <img src="assets/certificate.jpg" width="880" height="623" loading="lazy" decoding="async"
                      alt="ISO/IEC 27001:2022 Information Security Associate certificate issued by SkillFront to Andhika Sagiyono on 25 September 2026">
                 <span class="cert-card__hint" aria-hidden="true">
                   <svg viewBox="0 0 24 24" width="14" height="14"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>
                   View full size
                 </span>
-              </button>
+              </a>
               <div class="cert-card__body">
                 <h4 class="cert-card__title">ISO/IEC 27001:2022 Information Security Associate</h4>
                 <dl class="cert-card__meta">

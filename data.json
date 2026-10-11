@@ -1,0 +1,102 @@
+{
+  "profile": {
+    "name": "Andhika Permana Sagiyono",
+    "tagline": "Understanding systems. Designing with *security* in mind.",
+    "subtagline": "Cyber Security student at BINUS University, open to Cyber Security and Software Engineering internships.",
+    "about_text": "I'm Andhika Permana Sagiyono, a Cyber Security student at BINUS University with an interest in software engineering. I study how systems are designed and how identity, sessions, and application flows affect security.\n\nMy academic team projects cover e-commerce threat modeling and a pet transportation web application prototype. My contributions include cash-on-delivery threat analysis, conclusions and recommendations, CRC cards, application flow design, and use case diagrams.\n\nOutside coursework, I help produce Cyber Talk as a Media and Publication Activist at BINUS Cyber Security Community. I'm seeking a Cyber Security or Software Engineering internship to build practical skills with a team.",
+    "stats": [
+      { "label": "GPA", "value": "3.44", "suffix": "/ 4.00" },
+      { "label": "Academic team projects", "value": "2" },
+      { "label": "Certification", "value": "1" },
+      { "label": "University study started", "value": "2024" }
+    ],
+    "email": "andhikapermanasagiyono@gmail.com",
+    "linkedin": "https://www.linkedin.com/in/andhikapermanasagiyono",
+    "github": "https://github.com/APermanaS",
+    "photo_url": null,
+    "cv_url": "assets/CV.pdf"
+  },
+
+  "skill_categories": [
+    { "key": "security", "name": "Security", "sort_order": 1,
+      "headline": { "lead": "Security,", "accent": "in practice.", "rest": "Understanding systems, one layer at a time." } },
+    { "key": "web-development", "name": "Web Development", "sort_order": 2,
+      "headline": { "lead": "Web development,", "accent": "by design.", "rest": "From application flow to markup." } },
+    { "key": "networking-server", "name": "Networking/Server", "sort_order": 3,
+      "headline": { "lead": "Networks and servers,", "accent": "up close.", "rest": "Reading traffic to see how systems talk." } },
+    { "key": "database", "name": "Database", "sort_order": 4,
+      "headline": { "lead": "Data,", "accent": "in order.", "rest": "Starting with the fundamentals of SQL." } },
+    { "key": "tools", "name": "Tools", "sort_order": 5,
+      "headline": { "lead": "Tools,", "accent": "of the trade.", "rest": "From version control to reverse engineering." } }
+  ],
+
+  "skills": [
+    { "category": "Security", "name": "Threat modeling for cash-on-delivery transactions", "level": null, "icon_url": null, "sort_order": 1 },
+    { "category": "Security", "name": "DFD-based STRIDE analysis", "level": null, "icon_url": null, "sort_order": 2 },
+    { "category": "Security", "name": "Mitigation recommendations covering identity, session controls, and audit logging", "level": null, "icon_url": null, "sort_order": 3 },
+    { "category": "Security", "name": "OWASP Top 10", "level": null, "icon_url": null, "sort_order": 4 },
+
+    { "category": "Web Development", "name": "CRC-card development", "level": null, "icon_url": null, "sort_order": 1 },
+    { "category": "Web Development", "name": "Core application flow design", "level": null, "icon_url": null, "sort_order": 2 },
+    { "category": "Web Development", "name": "Contributions to use case diagrams and supporting models", "level": null, "icon_url": null, "sort_order": 3 },
+    { "category": "Web Development", "name": "HTML", "level": null, "icon_url": "assets/icons/html5.svg", "sort_order": 4 },
+    { "category": "Web Development", "name": "CSS", "level": null, "icon_url": "assets/icons/css.svg", "sort_order": 5 },
+    { "category": "Web Development", "name": "PHP", "level": null, "icon_url": "assets/icons/php.svg", "sort_order": 6 },
+
+    { "category": "Networking/Server", "name": "Linux", "level": null, "icon_url": "assets/icons/linux.svg", "sort_order": 1 },
+    { "category": "Networking/Server", "name": "Nmap", "level": null, "icon_url": null, "sort_order": 2 },
+    { "category": "Networking/Server", "name": "Wireshark", "level": null, "icon_url": "assets/icons/wireshark.svg", "sort_order": 3 },
+    { "category": "Networking/Server", "name": "PCAP analysis", "level": null, "icon_url": null, "sort_order": 4 },
+
+    { "category": "Database", "name": "SQL", "level": "Beginner", "icon_url": null, "sort_order": 1 },
+
+    { "category": "Tools", "name": "GitHub workflow", "level": null, "icon_url": "assets/icons/github.svg", "sort_order": 1 },
+    { "category": "Tools", "name": "VS Code", "level": null, "icon_url": null, "sort_order": 2 },
+    { "category": "Tools", "name": "Docker", "level": null, "icon_url": "assets/icons/docker.svg", "sort_order": 3 },
+    { "category": "Tools", "name": "Figma", "level": null, "icon_url": "assets/icons/figma.svg", "sort_order": 4 },
+    { "category": "Tools", "name": "JADX", "level": null, "icon_url": null, "sort_order": 5 },
+    { "category": "Tools", "name": "Apktool", "level": null, "icon_url": null, "sort_order": 6 },
+    { "category": "Tools", "name": "Ghidra", "level": null, "icon_url": null, "sort_order": 7 }
+  ],
+
+  "projects": [
+    {
+      "title": "Pet Butler — Pet Transportation Web Application",
+      "category": "code",
+      "period": "March–June 2026",
+      "short_desc": "An academic team prototype for pet transport bookings, pet profiles, and medical records.",
+      "detail_desc": "Our five-member team developed a pet transportation web application prototype with Customer, Admin, and Driver roles. The documented design covers accounts, pet profiles, service booking, delivery status, order history, and payment. I developed CRC cards, designed the core application flow, and contributed to use case diagrams and supporting models. The application code and Flask, SQLAlchemy, MySQL, and Docker Compose stack are the team's work.\n\nContext:\nAcademic group project; five-member team\n\nCore booking flow:\nLogin → Pet profile → Booking → Checkout → Order history.",
+      "role": "CRC-card development, core application flow design, and contributions to use case diagrams and supporting models.",
+      "tools": "CRC cards, use case diagrams, and GitHub workflow. Team application stack: Flask, SQLAlchemy, MySQL, and Docker Compose.",
+      "result": "My contributions produced CRC cards and a defined booking flow for the academic prototype, alongside use case and model contributions. My learning focus was CRC modeling, application flow, and GitHub collaboration.",
+      "repo_url": "https://github.com/cosmicus0/petButtler",
+      "image_url": null,
+      "doc_url": "assets/docs/pet-butler-presentation.pdf",
+      "sort_order": 1
+    },
+    {
+      "title": "Software Security Threat Modeling Report — E-commerce",
+      "category": "document",
+      "period": "2025–2026",
+      "short_desc": "An academic group report assessing five e-commerce features through DFD-based STRIDE analysis, with OWASP references.",
+      "detail_desc": "Our team assessed payment, search, promotions, login and registration, and cash on delivery, considering trade-offs between proposed mitigations. I handled the cash-on-delivery analysis and wrote Chapter 6, covering conclusions and recommendations. My analysis connected fake accounts, shared-device sessions, and weak logging to identity verification, session controls, and transaction audit logs. On 3 June 2026, the team also demonstrated SQL injection and authentication bypass using Burp Suite in an OWASP Juice Shop training lab.\n\nContext:\nAcademic group project\n\nScope:\nThe mitigations were analytical recommendations. The Juice Shop exercise was a training lab, not a live platform assessment.",
+      "role": "Cash-on-delivery threat analysis and the conclusions and recommendations chapter.",
+      "tools": "Data flow diagrams, STRIDE, and OWASP references. Team training lab: OWASP Juice Shop and Burp Suite.",
+      "result": "The report documents COD recommendations for OTP verification, device fingerprinting, auto-logout, primary-device confirmation, and IP, time, and device audit logs with OTP confirmation. My takeaway was that transaction traceability depends on identity, session controls, and logs.",
+      "repo_url": null,
+      "image_url": null,
+      "doc_url": "assets/docs/software-security-threat-model.pdf",
+      "sort_order": 2
+    }
+  ],
+
+  "certificates": [
+    {
+      "title": "ISO/IEC 27001:2022 Information Security Associate",
+      "issuer": "SkillFront",
+      "issued_date": "2026-09-25",
+      "image_url": "assets/certificate.jpg",
+      "sort_order": 1
+    }
+  ]
+}
