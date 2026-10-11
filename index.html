@@ -71,9 +71,11 @@
 
       <ul class="nav__menu" id="nav-menu" role="list">
         <li><a class="nav__link" href="#about">About</a></li>
-        <li><a class="nav__link" href="#skills">Skills</a></li>
-        <li><a class="nav__link" href="#projects">Projects</a></li>
-        <li><a class="nav__link" href="#certificate">Certificate</a></li>
+        <li data-nav="skills"><a class="nav__link" href="#skills">Skills</a></li>
+        <li data-nav="experience"><a class="nav__link" href="#experience">Experience</a></li>
+        <li data-nav="projects"><a class="nav__link" href="#projects">Projects</a></li>
+        <li data-nav="education"><a class="nav__link" href="#education">Education</a></li>
+        <li data-nav="certifications"><a class="nav__link" href="#certifications">Certifications</a></li>
         <li><a class="nav__link" href="#contact">Contact</a></li>
         <li class="nav__cta-item">
           <a class="btn btn--light btn--small" href="assets/CV.pdf" download="Andhika-Permana-Sagiyono-CV.pdf" data-cv>Download CV</a>
@@ -144,7 +146,7 @@
     </section>
 
     <!-- ============ Skills (signature: category cards side by side, each with its own accent + ornament) ============ -->
-    <section id="skills" class="skills section--dark" aria-labelledby="skills-title">
+    <section id="skills" class="skills section--dark" aria-labelledby="skills-title" data-section="skills">
       <div class="container">
         <h2 id="skills-title" class="skills__headline reveal">
           <span class="skills__lead">Skills,</span>
@@ -161,8 +163,35 @@
       </div>
     </section>
 
+    <!-- ============ Organization Experience (signature: thin timeline line with dots) ============ -->
+    <!-- data-theme="auto": script.js keeps the black / white alternation when a section is hidden -->
+    <section id="experience" class="experience section section--light" aria-labelledby="experience-title" data-section="experience" data-theme="auto">
+      <div class="container">
+        <h2 id="experience-title" class="section-title reveal">Organization Experience</h2>
+
+        <!-- Rendered from the experience table (fallback: data.json) by script.js; static entry = no-JS fallback -->
+        <ol id="experience-root" class="xp-timeline" role="list">
+          <li class="xp-item reveal">
+            <span class="xp-item__dot" aria-hidden="true"></span>
+            <article class="xp-card">
+              <header class="xp-card__head">
+                <span class="logo-tile" aria-hidden="true"><span class="logo-tile__mark">BC</span></span>
+                <div class="xp-card__titles">
+                  <h3 class="xp-card__org">BINUS Cyber Security Community</h3>
+                  <p class="xp-card__role">Media and Publication Activist</p>
+                </div>
+              </header>
+              <ul class="xp-card__bullets" role="list">
+                <li>Help produce Cyber Talk.</li>
+              </ul>
+            </article>
+          </li>
+        </ol>
+      </div>
+    </section>
+
     <!-- ============ Projects (signature: segmented toggle + flow chips) ============ -->
-    <section id="projects" class="projects section section--light" aria-labelledby="projects-title">
+    <section id="projects" class="projects section section--dark" aria-labelledby="projects-title" data-section="projects" data-theme="auto">
       <div class="container">
         <div class="section-head">
           <h2 id="projects-title" class="section-title reveal">Projects</h2>
@@ -179,63 +208,71 @@
       </div>
     </section>
 
-    <!-- ============ Education & Certificate (signature: gradient ring on the certificate) ============ -->
-    <section id="certificate" class="edu section section--dark" aria-labelledby="certificate-title">
+    <!-- ============ Education (signature: gradient hairline on top of each card) ============ -->
+    <section id="education" class="education section section--light" aria-labelledby="education-title" data-section="education" data-theme="auto">
       <div class="container">
-        <h2 id="certificate-title" class="section-title reveal">Education &amp; Certificates</h2>
+        <h2 id="education-title" class="section-title reveal">Education</h2>
 
-        <div class="edu__grid">
-          <div class="edu__col">
-            <h3 class="subsection-title reveal">Education</h3>
-            <ol class="timeline" role="list">
-              <li class="timeline__item reveal">
-                <h4 class="timeline__title">BINUS University</h4>
-                <ul class="timeline__list" role="list">
-                  <li>Bachelor's Degree in Computer Science (Cyber Security)</li>
-                  <li>September 2024–2028 (expected)</li>
-                  <li>GPA: 3.44 / 4.00</li>
-                  <li>Relevant coursework: Software Engineering; Software Security; and Penetration Testing</li>
-                </ul>
-              </li>
-              <li class="timeline__item reveal">
-                <h4 class="timeline__title">SMAIT Auliya</h4>
-                <ul class="timeline__list" role="list">
-                  <li>2021–2024</li>
-                </ul>
-              </li>
-            </ol>
-          </div>
-
-          <div class="edu__col">
-            <h3 class="subsection-title reveal" data-cert-heading>Certificate</h3>
-            <!-- Rendered from the certificates table (or data.json) by script.js; static card = no-JS fallback -->
-            <div class="reveal cert-list" id="cert-root">
-            <article class="cert-card">
-              <a class="cert-card__media" href="assets/certificate.jpg" target="_blank" rel="noopener noreferrer"
-                 aria-label="View ISO/IEC 27001:2022 Information Security Associate certificate full size">
-                <img src="assets/certificate.jpg" width="880" height="623" loading="lazy" decoding="async"
-                     alt="ISO/IEC 27001:2022 Information Security Associate certificate issued by SkillFront to Andhika Sagiyono on 25 September 2026">
-                <span class="cert-card__hint" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="14" height="14"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>
-                  View full size
-                </span>
-              </a>
-              <div class="cert-card__body">
-                <h4 class="cert-card__title">ISO/IEC 27001:2022 Information Security Associate</h4>
-                <dl class="cert-card__meta">
-                  <div><dt>Issuer</dt><dd>SkillFront</dd></div>
-                  <div><dt>Issued</dt><dd>25 September 2026</dd></div>
-                </dl>
-              </div>
-            </article>
+        <!-- Rendered from the education table (fallback: data.json) by script.js; static cards = no-JS fallback -->
+        <div id="education-root" class="edu-grid reveal-stagger">
+          <div class="edu-item reveal"><article class="edu-card">
+            <div class="edu-card__top">
+              <span class="logo-tile" aria-hidden="true"><span class="logo-tile__mark">BU</span></span>
+              <p class="edu-card__period">September 2024 – Expected 2028</p>
             </div>
-          </div>
+            <h3 class="edu-card__institution">BINUS University</h3>
+            <p class="edu-card__degree">Bachelor's Degree in Computer Science</p>
+            <p class="edu-card__field">Cyber Security</p>
+            <dl class="edu-card__facts">
+              <div><dt>GPA</dt><dd>3.44 / 4.00</dd></div>
+            </dl>
+            <p class="edu-card__desc">Relevant coursework: Software Engineering; Software Security; and Penetration Testing</p>
+          </article></div>
+          <div class="edu-item reveal"><article class="edu-card">
+            <div class="edu-card__top">
+              <span class="logo-tile" aria-hidden="true"><span class="logo-tile__mark">SA</span></span>
+              <p class="edu-card__period">2021 – 2024</p>
+            </div>
+            <h3 class="edu-card__institution">SMAIT Auliya</h3>
+          </article></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Certifications (signature: badge seal + gradient ring on the card) ============ -->
+    <section id="certifications" class="certifications section section--dark" aria-labelledby="certifications-title" data-section="certifications" data-theme="auto">
+      <div class="container">
+        <h2 id="certifications-title" class="section-title reveal">Certifications</h2>
+
+        <!-- Rendered from the certificates table (fallback: data.json) by script.js; static card = no-JS fallback -->
+        <div class="cert-list reveal-stagger" id="cert-root" data-count="1">
+          <div class="cert-item reveal"><article class="cert-card">
+            <a class="cert-card__media" href="assets/certificate.jpg" target="_blank" rel="noopener noreferrer"
+               aria-label="View ISO/IEC 27001:2022 Information Security Associate certificate full size">
+              <img src="assets/certificate.jpg" width="880" height="623" loading="lazy" decoding="async"
+                   alt="ISO/IEC 27001:2022 Information Security Associate certificate issued by SkillFront to Andhika Sagiyono on 25 September 2026">
+              <span class="cert-card__hint" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="14" height="14"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>
+                View full size
+              </span>
+            </a>
+            <div class="cert-card__body">
+              <span class="cert-card__seal" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="5.5"/><path d="M9.5 9l1.75 1.75L14.75 7.5M8.5 13.5L7 21l5-2.5 5 2.5-1.5-7.5"/></svg>
+              </span>
+              <h3 class="cert-card__title">ISO/IEC 27001:2022 Information Security Associate</h3>
+              <p class="cert-card__issuer">SkillFront</p>
+              <dl class="cert-card__meta">
+                <div><dt>Issued</dt><dd>25 September 2026</dd></div>
+              </dl>
+            </div>
+          </article></div>
         </div>
       </div>
     </section>
 
     <!-- ============ Contact (signature: gradient underline on hover) ============ -->
-    <section id="contact" class="contact section section--white" aria-labelledby="contact-title">
+    <section id="contact" class="contact section section--white" aria-labelledby="contact-title" data-theme="auto">
       <div class="container">
         <h2 id="contact-title" class="section-title reveal">Contact</h2>
         <address class="contact__list reveal-stagger">

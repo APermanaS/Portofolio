@@ -717,6 +717,29 @@ svg {
   .stats-editor__label { grid-column: 1 / -1; }
 }
 
+/* Bullet points repeater (Experience) */
+.bullets-editor { display: grid; gap: 10px; justify-items: start; }
+.bullets-editor__list { display: grid; gap: 8px; width: 100%; }
+
+.bullets-editor__row {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) repeat(3, 36px);
+  gap: 6px;
+  align-items: center;
+}
+
+.bullets-editor__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--blue), var(--purple));
+}
+
+/* A field greyed out by a checkbox (e.g. End while "I'm currently here" is ticked) */
+.field.is-disabled .field__label,
+.field.is-disabled .field__hint { opacity: 0.55; }
+.input:disabled { background: var(--light); color: var(--muted); cursor: not-allowed; }
+
 /* Sticky save bar under the profile form */
 .savebar {
   position: sticky;

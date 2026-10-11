@@ -59,3 +59,23 @@ Change Log
   databases use supabase/migrations/20261011120000_skills_update.sql (idempotent, data only, hides the old
   seeded skills instead of deleting them). Admin Skills page: category stays free text with de-duplicated
   suggestions, matched case-insensitively (a new name = a new card); updated hints.
+- 2026-10-11 · Experience / Education / Certifications · Page order is now Hero, About, Skills, Organization
+  Experience, Projects, Education, Certifications, Contact (navbar likewise, with the existing active highlight).
+  The old combined "Education & Certificates" section (#certificate) became two sections: #education and
+  #certifications. Backgrounds alternate black / white, so Projects now sits on black (white cards unchanged,
+  darker segmented track). Sections marked data-theme="auto" use the --sec-* tokens (style.css §3) and are
+  re-striped by script.js when a section is hidden, so the alternation always holds (Contact can also go black).
+  Experience: thin vertical timeline line with dots (blue ring when "Present"), one card per entry with a logo
+  tile (uploaded logo on white, else gradient monogram), role, period/location chips, bullets with gradient dots.
+  Education: two-column cards with a gradient hairline on top, period (end_label such as "Expected 2028"
+  overrides the end date), degree, field, GPA, description. Certifications: badge cards (gradient-ring seal over
+  the image edge) in a grid (1 card = 560px wide, 2 = side by side, then auto-fill); the image opens in the
+  existing image modal, missing image = "Image coming soon" placeholder, optional expiry and "Show credential".
+  A section and its nav link are hidden when it has no visible entries or is switched off in Admin → Sections
+  (profile.hidden_sections). For experience / education / certificates an empty Supabase result is final; data.json
+  is only the fallback when the table can't be read. Dates are month precision; show_months = false shows years
+  only (needed for "2021 – 2024"). Data: supabase/migrations/20261011130000_experience_education.sql (new tables with
+  RLS, grants and policies; new columns on certificates and profile; seeds only empty tables). Admin: new pages
+  Sections, Experience (bullet editor, "I'm currently here" disables End), Education; Certificates gets
+  expiry / credential URL; the CV upload shows the original file name and upload date. Tablet nav spacing is
+  tighter (734–1067px) to fit the extra links.
