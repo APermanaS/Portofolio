@@ -548,7 +548,8 @@
 
 
   /* ------------------------------------------------------------------------
-     7. Skills
+     7. Skills — one compact section: category cards side by side
+        (grid on tablet/desktop, scroll-snap carousel with dots on mobile)
      ------------------------------------------------------------------------ */
   const STOPWORDS = new Set(['and', 'for', 'of', 'the', 'to', 'in', 'a', 'an', 'with', 'on']);
 
@@ -566,113 +567,221 @@
       : word[0].toUpperCase() + word[1].toLowerCase();
   }
 
-  function buildSkillTile(skill, bundledIcon) {
+  /**
+   * Built-in icons, matched by skill name (letters + digits only, lower case).
+   * Used only when a skill has no uploaded icon_url. Glyphs are original,
+   * neutral line drawings (trusted static strings, stroke = currentColor).
+   */
+  const SKILL_GLYPHS = {
+    // Checklist — a neutral stand-in for "OWASP" (not the OWASP logo)
+    checklist: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6.5l1.75 1.75L8.5 5M3.5 12.5l1.75 1.75L8.5 11M3.5 18.5l1.75 1.75L8.5 17M11.5 7h9M11.5 13h9M11.5 19h6"/></svg>',
+    // Six-segment shield — STRIDE's six threat categories
+    stride: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l7.5 3v6c0 4.6-3.1 8.4-7.5 10-4.4-1.6-7.5-5.4-7.5-10v-6z"/><path d="M12 2.5v19M4.5 8.5h15M5.3 14.5h13.4"/></svg>',
+    // Connected blocks — application design
+    blocks: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8.5" y="2.5" width="7" height="5.5" rx="1.5"/><rect x="2.5" y="16" width="7" height="5.5" rx="1.5"/><rect x="14.5" y="16" width="7" height="5.5" rx="1.5"/><path d="M12 8v4M6 16v-4h12v4"/></svg>'
+  };
+
+  const SKILL_ICONS = {
+    owasp: { glyph: 'checklist' },
+    owasptop10: { glyph: 'checklist' },
+    stride: { glyph: 'stride' },
+    coreapplicationdesign: { glyph: 'blocks' },
+    html: { src: 'assets/icons/html5.svg' },
+    html5: { src: 'assets/icons/html5.svg' },
+    css: { src: 'assets/icons/css.svg' },
+    css3: { src: 'assets/icons/css.svg' },
+    javascript: { src: 'assets/icons/javascript.svg' },
+    js: { src: 'assets/icons/javascript.svg' },
+    php: { src: 'assets/icons/php.svg' },
+    wireshark: { src: 'assets/icons/wireshark.svg' },
+    burpsuite: { src: 'assets/icons/burpsuite.svg' },
+    linux: { src: 'assets/icons/linux.svg' },
+    docker: { src: 'assets/icons/docker.svg' },
+    figma: { src: 'assets/icons/figma.svg' },
+    git: { src: 'assets/icons/git.svg' },
+    github: { src: 'assets/icons/github.svg' },
+    mysql: { src: 'assets/icons/mysql.svg' }
+  };
+
+  const skillKey = (name) => clean(name).toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+  function glyph(name) {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = SKILL_GLYPHS[name] || '';
+    return tpl.content.firstElementChild;
+  }
+
+  /**
+   * Accent palette for category cards. Categories listed in data.json
+   * (skill_categories[].accent) keep their colour; any other category gets
+   * the first colour not used yet (cycling once all are taken).
+   */
+  const ACCENTS = ['blue', 'orange', 'green', 'purple', 'pink'];
+
+  function assignAccents(names, metaFor) {
+    const result = new Map();
+    const used = new Set();
+    names.forEach((name) => {
+      const accent = metaFor(name)?.accent;
+      if (ACCENTS.includes(accent)) {
+        result.set(name, accent);
+        used.add(accent);
+      }
+    });
+    let cursor = 0;
+    names.forEach((name) => {
+      if (result.has(name)) return;
+      const free = ACCENTS.find((accent) => !used.has(accent));
+      const accent = free || ACCENTS[cursor++ % ACCENTS.length];
+      used.add(accent);
+      result.set(name, accent);
+    });
+    return result;
+  }
+
+  function buildSkillTile(skill) {
     const iconBox = h('span', { class: 'skill-tile__icon', 'aria-hidden': 'true' });
-    const useMonogram = () => {
-      iconBox.replaceChildren(h('span', { class: 'skill-tile__monogram' }, monogram(skill.name)));
+    const builtIn = SKILL_ICONS[skillKey(skill.name)] || {};
+    const useFallback = () => {
+      const node = builtIn.glyph ? glyph(builtIn.glyph) : null;
+      iconBox.replaceChildren(node || h('span', { class: 'skill-tile__monogram' }, monogram(skill.name)));
     };
-
-    // Uploaded icon (png/webp) first, then the bundled monochrome SVG, then a monogram.
-    const src = safeUrl(skill.icon_url) || safeUrl(bundledIcon);
-
-    if (src) {
+    const useImage = (src, uploaded, onFail) => {
       const img = h('img', {
         alt: '',
-        width: 28,
-        height: 28,
+        width: 22,
+        height: 22,
         loading: 'lazy',
         decoding: 'async',
-        class: src.startsWith('assets/icons/') ? null : 'is-uploaded'
+        class: uploaded ? 'is-uploaded' : null
       });
-      bindImage(img, useMonogram);
+      bindImage(img, onFail);
       img.src = src;
-      iconBox.append(img);
-    } else {
-      useMonogram();
-    }
+      iconBox.replaceChildren(img);
+    };
 
+    // Priority: uploaded icon_url → built-in icon file / glyph → monogram.
+    const uploaded = safeUrl(skill.icon_url);
+    const bundled = safeUrl(builtIn.src);
+    const tryBundled = () => (bundled ? useImage(bundled, false, useFallback) : useFallback());
+    if (uploaded) useImage(uploaded, !uploaded.startsWith('assets/icons/'), tryBundled);
+    else tryBundled();
+
+    const level = clean(skill.level);
     return h(
       'li',
-      { class: 'reveal' },
+      { class: 'skill-tile' },
+      iconBox,
       h(
-        'div',
-        { class: 'skill-tile' },
-        iconBox,
+        'span',
+        { class: 'skill-tile__text' },
         h('span', { class: 'skill-tile__name' }, clean(skill.name)),
-        clean(skill.level) ? h('span', { class: 'skill-tile__level' }, clean(skill.level)) : null
+        level ? h('span', { class: 'skill-tile__level' }, level) : null
       )
     );
   }
 
-  function buildSkillCategory(name, meta, skills, iconFor) {
-    const key = isFilled(meta?.key) ? meta.key : slugify(name);
-    const headingId = `skills-${key}`;
-    const headline = meta?.headline || {};
-    const lead = isFilled(headline.lead) ? headline.lead : name;
-
+  function buildSkillCard(name, meta, accent, skills, index) {
+    const key = isFilled(meta?.key) ? meta.key : slugify(name) || `category-${index + 1}`;
+    const headingId = `skills-cat-${index + 1}-${key}`;
     return h(
-      'section',
-      { class: 'skill-cat', 'data-category': key, 'aria-labelledby': headingId },
+      'article',
+      { class: 'skill-card', 'data-category': key, 'data-accent': accent, 'aria-labelledby': headingId },
       h('div', { class: 'ornament', 'aria-hidden': 'true' }),
-      h(
-        'div',
-        { class: 'container' },
-        h('p', { class: 'skill-cat__label reveal' }, name),
-        h(
-          'h3',
-          { class: 'skill-cat__headline reveal', id: headingId },
-          h('span', { class: 'skill-cat__lead' }, lead),
-          isFilled(headline.accent) ? [' ', h('em', { class: 'skill-cat__accent' }, headline.accent)] : null,
-          isFilled(headline.rest) ? [' ', h('span', { class: 'skill-cat__rest' }, headline.rest)] : null
-        ),
-        h('ul', { class: 'skill-grid', role: 'list' }, skills.map((skill) => buildSkillTile(skill, iconFor(skill))))
-      )
+      h('h3', { class: 'skill-card__title', id: headingId }, name),
+      h('ul', { class: 'skill-card__grid', role: 'list' }, skills.map(buildSkillTile))
     );
   }
 
-  function renderSkills({ rows }, categories, local) {
+  /** Mobile carousel dots: shown by CSS below 734px only, when there are 2+ cards. */
+  function buildSkillDots(track, cards, names) {
+    if (cards.length < 2) return null;
+    const dots = cards.map((card, i) =>
+      h('button', {
+        class: 'skills__dot',
+        type: 'button',
+        'aria-label': `Show ${names[i]}`,
+        'aria-current': i === 0 ? 'true' : null,
+        onclick: () => {
+          track.scrollTo({
+            left: card.offsetLeft - cards[0].offsetLeft,
+            behavior: reducedMotion.matches ? 'auto' : 'smooth'
+          });
+        }
+      })
+    );
+
+    let frame = 0;
+    const sync = () => {
+      frame = 0;
+      const x = track.scrollLeft;
+      let active = 0;
+      let best = Infinity;
+      cards.forEach((card, i) => {
+        const distance = Math.abs(card.offsetLeft - cards[0].offsetLeft - x);
+        if (distance < best) {
+          best = distance;
+          active = i;
+        }
+      });
+      dots.forEach((dot, i) => {
+        if (i === active) dot.setAttribute('aria-current', 'true');
+        else dot.removeAttribute('aria-current');
+      });
+    };
+    track.addEventListener('scroll', () => {
+      frame ||= requestAnimationFrame(sync);
+    }, { passive: true });
+
+    return h('div', { class: 'skills__dots', role: 'group', 'aria-label': 'Skill categories' }, dots);
+  }
+
+  function renderSkills({ rows }, categories) {
     const root = $('#skills-root');
     if (!root) return;
     if (!rows) {
-      root.replaceChildren(h('div', { class: 'container' }, loadError('Skills')));
+      root.replaceChildren(loadError('Skills'));
       return;
     }
 
-    // Bundled SVG icons (repo files) keep working for skills without an uploaded icon.
-    const bundled = new Map(
-      (local?.skills || [])
-        .filter((s) => isFilled(s?.name) && safeUrl(s.icon_url).startsWith('assets/icons/'))
-        .map((s) => [s.name.trim().toLowerCase(), s.icon_url])
-    );
-    const iconFor = (skill) => bundled.get(clean(skill.name).toLowerCase()) || '';
-
-    // Drop empty / [ISI MANUAL] skills, then group by category (first-seen order)
+    // Drop hidden / empty / [ISI MANUAL] skills, then group by category
+    // (case-insensitive, first spelling wins, first-seen order)
     const groups = new Map();
     for (const skill of rows) {
+      if (skill?.is_visible === false) continue;
       if (!isFilled(skill?.name) || !isFilled(skill?.category)) continue;
-      const category = skill.category.trim();
-      if (!groups.has(category)) groups.set(category, []);
-      groups.get(category).push(skill);
+      const id = skill.category.trim().toLowerCase();
+      if (!groups.has(id)) groups.set(id, { name: skill.category.trim(), skills: [] });
+      groups.get(id).skills.push(skill);
     }
 
-    const metaFor = (name) => categories.find((c) => c.name.toLowerCase() === name.toLowerCase());
+    const metaFor = (name) =>
+      categories.find((c) => typeof c?.name === 'string' && c.name.trim().toLowerCase() === name.toLowerCase());
     const seen = [...groups.keys()];
-    const orderOf = (name) => {
-      const meta = metaFor(name);
-      return meta ? Number(meta.sort_order) || 0 : 1000 + seen.indexOf(name);
+    const orderOf = (id) => {
+      const meta = metaFor(id);
+      return meta ? Number(meta.sort_order) || 0 : 1000 + seen.indexOf(id);
     };
 
-    // Categories with no remaining entries never get rendered
-    const fragment = document.createDocumentFragment();
-    seen
+    // Categories without visible skills never get a card
+    const ordered = seen
+      .filter((id) => groups.get(id).skills.length)
       .sort((a, b) => orderOf(a) - orderOf(b))
-      .forEach((name) => {
-        const skills = groups.get(name).sort(bySortOrder);
-        if (skills.length) fragment.append(buildSkillCategory(name, metaFor(name), skills, iconFor));
-      });
+      .map((id) => groups.get(id));
 
-    root.replaceChildren(fragment);
-    observeReveal(root);
+    const names = ordered.map((g) => g.name);
+    const accents = assignAccents(names, metaFor);
+    const cards = ordered.map((group, i) =>
+      buildSkillCard(group.name, metaFor(group.name), accents.get(group.name), group.skills.sort(bySortOrder), i)
+    );
+
+    if (!cards.length) {
+      root.replaceChildren();
+      return;
+    }
+
+    const track = h('div', { class: 'skills__track', 'data-count': String(Math.min(cards.length, 5)) }, cards);
+    root.replaceChildren(...[track, buildSkillDots(track, cards, names)].filter(Boolean));
   }
 
 
@@ -1056,7 +1165,7 @@
     };
 
     run('Profile', () => renderProfile(content.profile.rows?.[0]));
-    run('Skills', () => renderSkills(content.skills, content.categories, content.local));
+    run('Skills', () => renderSkills(content.skills, content.categories));
     run('Projects', () => renderProjects(content.projects));
     run('Certificates', () => renderCertificates(content.certificates));
   }

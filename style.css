@@ -10,7 +10,7 @@
     7. Hero
     8. About
     9. Skills — base
-   10. Skills — category themes (accent + ornament, ONE block per category)
+   10. Skills — category ornaments (ONE block per category)
    11. Projects
    12. Placeholders (missing images)
    13. Modals
@@ -302,13 +302,13 @@ address { font-style: normal; }
   transform: none;
 }
 
-/* Staggering: siblings inside a .reveal-stagger group (and skill tiles) */
-.reveal-stagger > .reveal:nth-child(2),  .skill-grid > .reveal:nth-child(2)  { --reveal-delay: 70ms; }
-.reveal-stagger > .reveal:nth-child(3),  .skill-grid > .reveal:nth-child(3)  { --reveal-delay: 140ms; }
-.reveal-stagger > .reveal:nth-child(4),  .skill-grid > .reveal:nth-child(4)  { --reveal-delay: 210ms; }
-.reveal-stagger > .reveal:nth-child(5),  .skill-grid > .reveal:nth-child(5)  { --reveal-delay: 280ms; }
-.reveal-stagger > .reveal:nth-child(6),  .skill-grid > .reveal:nth-child(6)  { --reveal-delay: 350ms; }
-.reveal-stagger > .reveal:nth-child(n+7), .skill-grid > .reveal:nth-child(n+7) { --reveal-delay: 420ms; }
+/* Staggering: siblings inside a .reveal-stagger group */
+.reveal-stagger > .reveal:nth-child(2) { --reveal-delay: 70ms; }
+.reveal-stagger > .reveal:nth-child(3) { --reveal-delay: 140ms; }
+.reveal-stagger > .reveal:nth-child(4) { --reveal-delay: 210ms; }
+.reveal-stagger > .reveal:nth-child(5) { --reveal-delay: 280ms; }
+.reveal-stagger > .reveal:nth-child(6) { --reveal-delay: 350ms; }
+.reveal-stagger > .reveal:nth-child(n+7) { --reveal-delay: 420ms; }
 
 /* Hero intro plays on load (CSS only, so the LCP text is never JS-gated) */
 .hero-intro { animation: fade-up 1s var(--ease-out) both; }
@@ -684,42 +684,159 @@ address { font-style: normal; }
 
 /* ==========================================================================
    9. Skills — base
+   One compact section: two-tone headline, then the categories side by side
+   as cards (≥1024px: 2–3 per row · 734–1023px: 2 columns · <734px:
+   scroll-snap carousel with a peek of the next card and dot indicators).
    ========================================================================== */
 .skills {
   scroll-margin-top: var(--nav-height);
   background: var(--color-black);
+  padding-block: var(--space-12);
 }
 
-.skills__intro { padding-top: var(--space-12); }
-
-@media (min-width: 1068px) {
-  .skills__intro { padding-top: var(--space-16); }
+@media (min-width: 1024px) {
+  .skills { padding-block: var(--space-16) var(--space-12); }
 }
 
-.skills__intro .section-title { margin-bottom: var(--space-4); }
+/* Two-tone headline: white bold + italic accent word + grey continuation */
+.skills__headline {
+  max-width: 20em;
+  margin-bottom: var(--space-6);
+  font-size: clamp(32px, 3vw + 18px, 56px);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: var(--tracking-tight);
+  text-wrap: balance;
+}
 
-/* One full-width black sub-section per category.
-   Defaults below are overridden by the theme blocks in §10. */
-.skill-cat {
+.skills__lead   { color: var(--text-on-dark); }
+.skills__accent { font-style: italic; padding-right: 0.06em; }
+.skills__rest   { font-weight: 600; color: var(--text-on-dark-muted); }
+
+/* Card track: grid on tablet/desktop, carousel on mobile */
+.skills__track {
+  position: relative; /* offsetParent for the carousel dots */
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: var(--space-3);
+}
+
+.skills__track[data-count="1"] { grid-template-columns: minmax(0, 1fr); }
+
+@media (min-width: 1024px) {
+  /* 2 → 2 columns, 3 → 3, 4 → 2 × 2, 5+ → 3 per row */
+  .skills__track[data-count="3"],
+  .skills__track[data-count="5"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 733px) {
+  .skills__track {
+    display: flex;
+    gap: var(--space-2);
+    margin-inline: calc(-1 * var(--gutter));
+    padding: 4px var(--gutter) var(--space-2);
+    scroll-padding-inline: var(--gutter);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .skills__track::-webkit-scrollbar { display: none; }
+
+  .skills__track > .skill-card {
+    flex: 0 0 86%;
+    scroll-snap-align: start;
+  }
+
+  .skills__track[data-count="1"] > .skill-card { flex-basis: 100%; }
+}
+
+/* Dot indicators (mobile carousel only) */
+.skills__dots { display: none; }
+
+@media (max-width: 733px) {
+  .skills__dots {
+    display: flex;
+    justify-content: center;
+    gap: 2px;
+    margin-top: var(--space-1);
+  }
+}
+
+.skills__dot {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+}
+
+.skills__dot::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.28);
+  transition: width 0.3s var(--ease-out), background-color 0.3s;
+}
+
+.skills__dot[aria-current="true"]::before {
+  width: 18px;
+  background: var(--text-on-dark);
+}
+
+.skills__dot:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 0;
+}
+
+/* Category card. Defaults below (incl. a generic ring ornament for new
+   categories) are overridden by the theme blocks in §10. */
+.skill-card {
   --accent: var(--blue);
-  --ornament-mask: none;
-  --ornament-size: auto;
-  --ornament-position: center;
+  --ornament-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Cg fill='none' stroke='black' stroke-width='1.5'%3E%3Ccircle cx='200' cy='200' r='190'/%3E%3Ccircle cx='200' cy='200' r='150'/%3E%3Ccircle cx='200' cy='200' r='110'/%3E%3Ccircle cx='200' cy='200' r='70'/%3E%3Ccircle cx='200' cy='200' r='30'/%3E%3C/g%3E%3C/svg%3E");
+  --ornament-size: 300px auto;
+  --ornament-position: right -110px top -110px;
   --ornament-repeat: no-repeat;
-  --ornament-fade: radial-gradient(ellipse 70% 90% at 88% 45%, #000 0%, rgba(0, 0, 0, 0.55) 45%, transparent 78%);
-  --ornament-opacity: 0;
+  --ornament-fade: radial-gradient(ellipse 80% 75% at 100% 0%, #000 0%, rgba(0, 0, 0, 0.5) 45%, transparent 78%);
+  --ornament-opacity: 0.35;
   --ornament-animation: none;
 
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  padding-block: var(--space-10);
-  border-top: 1px solid var(--hairline-dark);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-card);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, var(--surface-dark)) 0%, var(--surface-dark) 60%);
+  border: 1px solid var(--hairline-dark);
+  transition: border-color 0.4s, box-shadow 0.4s;
 }
 
-@media (min-width: 1068px) {
-  .skill-cat { padding-block: var(--space-16); }
+@media (min-width: 1024px) {
+  .skill-card { padding: var(--space-4); }
 }
+
+.skill-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  box-shadow: 0 24px 64px -28px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+/* Accent colours: from data.json (skill_categories[].accent) or auto-assigned by script.js */
+.skill-card[data-accent="blue"]   { --accent: var(--blue); }
+.skill-card[data-accent="orange"] { --accent: var(--orange); }
+.skill-card[data-accent="green"]  { --accent: var(--green); }
+.skill-card[data-accent="purple"] { --accent: var(--purple); }
+.skill-card[data-accent="pink"]   { --accent: var(--pink); }
 
 /* Decorative layer: accent colour shown through an SVG/CSS mask, faded at the edges */
 .ornament {
@@ -746,26 +863,28 @@ address { font-style: normal; }
 
 @keyframes ornament-float {
   from { transform: translate3d(0, 0, 0); }
-  to   { transform: translate3d(0, -16px, 0); }
+  to   { transform: translate3d(0, -10px, 0); }
 }
 
 @keyframes ornament-drift {
   from { transform: translate3d(0, 0, 0); }
-  to   { transform: translate3d(-12px, 8px, 0); }
+  to   { transform: translate3d(-8px, 6px, 0); }
 }
 
-.skill-cat__label {
+.skill-card__title {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  margin-bottom: var(--space-2);
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--accent);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--text-on-dark);
 }
 
-.skill-cat__label::before {
+.skill-card__title::before {
   content: "";
+  flex: none;
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -773,84 +892,55 @@ address { font-style: normal; }
   box-shadow: 0 0 12px var(--accent);
 }
 
-/* Two-tone headline: white bold + italic accent word + grey continuation */
-.skill-cat__headline {
-  max-width: 18em;
-  margin-bottom: var(--space-6);
-  font-size: clamp(32px, 3.5vw + 18px, 64px);
-  font-weight: 700;
-  line-height: 1.08;
-  letter-spacing: var(--tracking-tight);
-  text-wrap: balance;
-}
-
-@media (min-width: 1068px) {
-  .skill-cat__headline { margin-bottom: var(--space-8); }
-}
-
-.skill-cat__lead   { color: var(--text-on-dark); }
-.skill-cat__accent { font-style: italic; color: var(--accent); }
-.skill-cat__rest   { font-weight: 600; color: var(--text-on-dark-muted); }
-
-/* Tile grid: 2 / 3 / 6 columns */
-.skill-grid {
+/* Compact tiles in a wrapped grid */
+.skill-card__grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2);
-}
-
-@media (min-width: 734px) {
-  .skill-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-
-@media (min-width: 1068px) {
-  .skill-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 128px), 1fr));
+  gap: var(--space-1);
 }
 
 .skill-tile {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-1);
-  padding: var(--space-2);
-  border-radius: var(--radius-card);
-  background: rgba(255, 255, 255, 0.03);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-tile);
+  background: rgba(255, 255, 255, 0.035);
   border: 1px solid var(--hairline-dark);
-  height: 100%;
   transition:
-    transform 0.4s var(--ease-out),
-    border-color 0.4s,
-    background-color 0.4s,
-    box-shadow 0.4s;
+    transform 0.3s var(--ease-out),
+    border-color 0.3s,
+    background-color 0.3s;
 }
 
 .skill-tile:hover {
-  transform: translateY(-4px);
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  background: color-mix(in srgb, var(--accent) 6%, #050505);
-  box-shadow: 0 12px 40px -12px color-mix(in srgb, var(--accent) 55%, transparent);
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, #0a0a0b);
 }
 
 .skill-tile__icon {
+  flex: none;
   display: grid;
   place-items: center;
-  width: 56px;
-  height: 56px;
-  margin-bottom: var(--space-1);
-  border-radius: var(--radius-tile);
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface-dark));
-  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
-  transition: box-shadow 0.4s;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-dark-2));
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--text-on-dark);
+  transition: box-shadow 0.3s;
 }
 
 .skill-tile:hover .skill-tile__icon {
-  box-shadow: 0 0 24px color-mix(in srgb, var(--accent) 50%, transparent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
-/* Icons are monochrome black SVGs: invert to white on dark tiles */
+/* Bundled icons are monochrome black SVGs: invert to white on dark tiles */
 .skill-tile__icon img {
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   filter: invert(1);
   opacity: 0;
   transition: opacity 0.3s;
@@ -858,42 +948,55 @@ address { font-style: normal; }
 
 .skill-tile__icon img.is-loaded { opacity: 0.92; }
 
+/* Built-in line glyphs (STRIDE, application design, OWASP checklist) */
+.skill-tile__icon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.92;
+}
+
 .skill-tile__monogram {
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--accent);
 }
 
+.skill-tile__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .skill-tile__name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.25;
   color: var(--text-on-dark);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   hyphens: auto;
 }
 
 .skill-tile__level {
   font-size: 12px;
   font-weight: 500;
+  line-height: 1.2;
   color: var(--text-on-dark-muted);
 }
 
 /* Closing line */
 .skills__closing {
-  padding-block: var(--space-12);
-  border-top: 1px solid var(--hairline-dark);
-}
-
-@media (min-width: 1068px) {
-  .skills__closing { padding-block: var(--space-16); }
-}
-
-.skills__closing p {
-  font-size: clamp(28px, 2.5vw + 16px, 48px);
+  max-width: 26em;
+  margin-top: var(--space-8);
+  font-size: clamp(22px, 1.5vw + 14px, 32px);
   font-weight: 600;
-  line-height: 1.15;
+  line-height: 1.2;
   letter-spacing: -0.02em;
   color: var(--text-on-dark-muted);
   text-wrap: balance;
@@ -901,57 +1004,54 @@ address { font-style: normal; }
 
 
 /* ==========================================================================
-   10. Skills — category themes
-   Edit ONE block to change a category's accent colour or ornament.
-   Keys match "key" in skills.json → data-category="<key>".
+   10. Skills — category ornaments
+   Edit ONE block to change a category's ornament. Keys match "key" in
+   data.json skill_categories → data-category="<key>". Accent colours live in
+   data.json ("accent"); categories not listed there get the next free colour
+   and the default ring ornament from §9.
    ========================================================================== */
 
-/* — Security · blue · faint concentric shield / layer lines — */
-.skill-cat[data-category="security"] {
-  --accent: var(--blue);
+/* — Security · faint concentric shield / layer lines — */
+.skill-card[data-category="security"] {
   --ornament-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='440' viewBox='0 0 400 440'%3E%3Cg fill='none' stroke='black' stroke-width='1.5'%3E%3Cpath vector-effect='non-scaling-stroke' d='M200 20L360 80V200C360 300 290 370 200 410C110 370 40 300 40 200V80Z'/%3E%3Cpath vector-effect='non-scaling-stroke' transform='matrix(0.8 0 0 0.8 40 43)' d='M200 20L360 80V200C360 300 290 370 200 410C110 370 40 300 40 200V80Z'/%3E%3Cpath vector-effect='non-scaling-stroke' transform='matrix(0.6 0 0 0.6 80 86)' d='M200 20L360 80V200C360 300 290 370 200 410C110 370 40 300 40 200V80Z'/%3E%3Cpath vector-effect='non-scaling-stroke' transform='matrix(0.4 0 0 0.4 120 129)' d='M200 20L360 80V200C360 300 290 370 200 410C110 370 40 300 40 200V80Z'/%3E%3Cpath vector-effect='non-scaling-stroke' transform='matrix(0.2 0 0 0.2 160 172)' d='M200 20L360 80V200C360 300 290 370 200 410C110 370 40 300 40 200V80Z'/%3E%3C/g%3E%3C/svg%3E");
-  --ornament-size: min(560px, 90vw) auto;
-  --ornament-position: right -48px center;
+  --ornament-size: 260px auto;
+  --ornament-position: right -64px top -56px;
   --ornament-opacity: 0.4;
 }
 
-/* — Web Development · orange · floating { } brackets — */
-.skill-cat[data-category="web-development"] {
-  --accent: var(--orange);
+/* — Web Development · floating { } brackets — */
+.skill-card[data-category="web-development"] {
   --ornament-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='480' viewBox='0 0 600 480'%3E%3Cg fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath vector-effect='non-scaling-stroke' transform='translate(380 40) scale(1.6)' d='M30 5C15 5 15 15 15 30V40C15 47 10 50 5 50C10 50 15 53 15 60V70C15 85 15 95 30 95M70 5C85 5 85 15 85 30V40C85 47 90 50 95 50C90 50 85 53 85 60V70C85 85 85 95 70 95'/%3E%3Cpath vector-effect='non-scaling-stroke' transform='translate(250 270) scale(1)' d='M30 5C15 5 15 15 15 30V40C15 47 10 50 5 50C10 50 15 53 15 60V70C15 85 15 95 30 95M70 5C85 5 85 15 85 30V40C85 47 90 50 95 50C90 50 85 53 85 60V70C85 85 85 95 70 95'/%3E%3Cpath vector-effect='non-scaling-stroke' transform='translate(470 310) scale(0.7)' d='M30 5C15 5 15 15 15 30V40C15 47 10 50 5 50C10 50 15 53 15 60V70C15 85 15 95 30 95M70 5C85 5 85 15 85 30V40C85 47 90 50 95 50C90 50 85 53 85 60V70C85 85 85 95 70 95'/%3E%3Cpath vector-effect='non-scaling-stroke' transform='translate(130 100) scale(0.6)' d='M30 5C15 5 15 15 15 30V40C15 47 10 50 5 50C10 50 15 53 15 60V70C15 85 15 95 30 95M70 5C85 5 85 15 85 30V40C85 47 90 50 95 50C90 50 85 53 85 60V70C85 85 85 95 70 95'/%3E%3Cpath vector-effect='non-scaling-stroke' transform='translate(520 170) scale(0.45)' d='M30 5C15 5 15 15 15 30V40C15 47 10 50 5 50C10 50 15 53 15 60V70C15 85 15 95 30 95M70 5C85 5 85 15 85 30V40C85 47 90 50 95 50C90 50 85 53 85 60V70C85 85 85 95 70 95'/%3E%3C/g%3E%3C/svg%3E");
-  --ornament-size: min(680px, 100vw) auto;
-  --ornament-position: right -32px top 32px;
+  --ornament-size: 400px auto;
+  --ornament-position: right -96px top -40px;
   --ornament-opacity: 0.35;
   --ornament-animation: ornament-float 9s ease-in-out infinite alternate;
 }
 
-/* — Networking/Server · green · node-and-line network — */
-.skill-cat[data-category="networking-server"] {
-  --accent: var(--green);
+/* — Networking/Server · node-and-line network — */
+.skill-card[data-category="networking-server"] {
   --ornament-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='480' viewBox='0 0 600 480'%3E%3Cpath d='M420 60L540 140M420 60L360 180M420 60L260 80M540 140L360 180M540 140L480 260M360 180L480 260M360 180L220 200M360 180L300 320M480 260L560 370M480 260L300 320M480 260L410 420M300 320L410 420M300 320L150 370M220 200L260 80M220 200L150 370M560 370L410 420' fill='none' stroke='black' stroke-width='1.2'/%3E%3Cg fill='black'%3E%3Ccircle cx='420' cy='60' r='5'/%3E%3Ccircle cx='540' cy='140' r='5'/%3E%3Ccircle cx='360' cy='180' r='5'/%3E%3Ccircle cx='480' cy='260' r='5'/%3E%3Ccircle cx='560' cy='370' r='5'/%3E%3Ccircle cx='300' cy='320' r='5'/%3E%3Ccircle cx='410' cy='420' r='5'/%3E%3Ccircle cx='220' cy='200' r='5'/%3E%3Ccircle cx='150' cy='370' r='5'/%3E%3Ccircle cx='260' cy='80' r='5'/%3E%3C/g%3E%3Cg fill='none' stroke='black' stroke-width='1.2'%3E%3Ccircle cx='360' cy='180' r='12'/%3E%3Ccircle cx='480' cy='260' r='12'/%3E%3C/g%3E%3C/svg%3E");
-  --ornament-size: min(680px, 100vw) auto;
-  --ornament-position: right -24px center;
+  --ornament-size: 400px auto;
+  --ornament-position: right -120px top -60px;
   --ornament-opacity: 0.4;
   --ornament-animation: ornament-drift 14s ease-in-out infinite alternate;
 }
 
-/* — Database · purple · stacked cylinders — */
-.skill-cat[data-category="database"] {
-  --accent: var(--purple);
+/* — Database · stacked cylinders — */
+.skill-card[data-category="database"] {
   --ornament-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='480' viewBox='0 0 600 480'%3E%3Cg fill='none' stroke='black' stroke-width='1.5'%3E%3Cellipse cx='440' cy='80' rx='90' ry='24'/%3E%3Cpath d='M350 80V290M530 80V290M350 150A90 24 0 0 0 530 150M350 220A90 24 0 0 0 530 220M350 290A90 24 0 0 0 530 290'/%3E%3Cellipse cx='220' cy='300' rx='50' ry='14'/%3E%3Cpath d='M170 300V380M270 300V380M170 340A50 14 0 0 0 270 340M170 380A50 14 0 0 0 270 380'/%3E%3Cellipse cx='545' cy='385' rx='30' ry='9'/%3E%3Cpath d='M515 385V435M575 385V435M515 410A30 9 0 0 0 575 410M515 435A30 9 0 0 0 575 435'/%3E%3C/g%3E%3C/svg%3E");
-  --ornament-size: min(640px, 100vw) auto;
-  --ornament-position: right -24px center;
+  --ornament-size: 380px auto;
+  --ornament-position: right -110px top -40px;
   --ornament-opacity: 0.4;
 }
 
-/* — Tools · pink · dot grid — */
-.skill-cat[data-category="tools"] {
-  --accent: var(--pink);
+/* — Tools · dot grid — */
+.skill-card[data-category="tools"] {
   --ornament-mask: radial-gradient(circle, #000 1.5px, transparent 2px);
-  --ornament-size: 24px 24px;
+  --ornament-size: 20px 20px;
   --ornament-position: 0 0;
   --ornament-repeat: repeat;
-  --ornament-fade: radial-gradient(ellipse 55% 80% at 90% 40%, #000 0%, rgba(0, 0, 0, 0.4) 50%, transparent 80%);
+  --ornament-fade: radial-gradient(ellipse 60% 70% at 100% 0%, #000 0%, rgba(0, 0, 0, 0.4) 50%, transparent 80%);
   --ornament-opacity: 0.45;
 }
 

@@ -46,5 +46,6 @@ Drag a file onto the upload box or click **choose a file**. You see a preview an
 ## Good to know
 
 - Changes show up on the public site when the page is reloaded. No deploy is needed.
-- Skill categories are matched by name. The five built-in categories (Security, Web Development, Networking/Server, Database, Tools) keep their colours and headlines. A new category gets a default style.
+- Skill categories are free text with suggestions, matched by name (capitalisation doesn't matter). Each category is one card in the Skills section. The five built-in categories (Security, Web Development, Networking/Server, Database, Tools) keep their colours and ornaments. A new category becomes a new card automatically, with the next free accent colour and a default ornament. A category with no visible skills is not shown.
+- Leave **Level** empty to show no level label on the tile.
 - Forgot your password? Reset it in Supabase under **Authentication → Users**.

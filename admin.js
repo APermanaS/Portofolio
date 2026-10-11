@@ -1266,10 +1266,12 @@
   }
 
   // ---- Generic list view (Skills, Projects, Certificates) ----
+  const groupKey = (value) => String(value ?? '').trim().toLowerCase();
+
   const LIST_CONFIG = {
     skills: {
       title: 'Skills',
-      sub: 'Grouped by category. Order within a category with the arrows.',
+      sub: 'Grouped by category — each category is one card on the site. Order within a category with the arrows. Categories with no visible skills are not shown.',
       noun: 'skill',
       fileFields: ['icon_url'],
       group: (row) => row.category,
@@ -1278,17 +1280,25 @@
       thumbOf: (row) => ({ src: row.icon_url, glyph: 'sparkles', icon: true }),
       fields: () => [
         { name: 'category', label: 'Category', type: 'text', max: LIMITS.skills.category, required: true, list: 'skill-categories',
-          hint: 'Pick an existing category to keep its colours, or type a new one.' },
+          hint: 'Free text. Pick a suggested category to add the skill to that card, or type a new name: it appears on the site as a new card with the next free accent colour.' },
         { name: 'name', label: 'Skill name', type: 'text', max: LIMITS.skills.name, required: true },
-        { name: 'level', label: 'Level', type: 'text', max: LIMITS.skills.level, placeholder: 'e.g. Beginner (optional)' },
+        { name: 'level', label: 'Level', type: 'text', max: LIMITS.skills.level, placeholder: 'e.g. Beginner (optional)',
+          hint: 'Optional. Leave empty to show no level label.' },
         { name: 'icon_url', label: 'Icon', type: 'upload', kind: 'icon', full: true,
-          hint: 'Optional. Without an icon the tile shows initials (or the built-in icon, if there is one). Use a light or coloured icon — tiles are dark.' },
+          hint: 'Optional, and always used first. Without an upload the tile shows the built-in icon matched by skill name (e.g. HTML, CSS, JavaScript, PHP, Wireshark, Burp Suite, OWASP, STRIDE, Core Application Design) or initials. Use a light or coloured icon — tiles are dark.' },
         { name: 'is_visible', label: 'Visible on the site', type: 'switch', full: true }
       ],
-      datalist: (rows, local) => {
-        const names = new Set([...(local?.skill_categories || []).map((c) => c.name), ...rows.map((r) => r.category)]);
-        return h('datalist', { id: 'skill-categories' }, [...names].filter(Boolean).map((name) => h('option', { value: name })));
-      }
+      // Suggestions: categories already in use first, then the built-in ones (case-insensitive, no duplicates)
+      categoryNames: (rows, local) => {
+        const seen = new Map();
+        [...rows.map((r) => r.category), ...(local?.skill_categories || []).map((c) => c?.name)].forEach((name) => {
+          const text = typeof name === 'string' ? name.trim() : '';
+          if (text && !seen.has(text.toLowerCase())) seen.set(text.toLowerCase(), text);
+        });
+        return [...seen.values()];
+      },
+      datalist: (rows, local) =>
+        h('datalist', { id: 'skill-categories' }, LIST_CONFIG.skills.categoryNames(rows, local).map((name) => h('option', { value: name })))
     },
     projects: {
       title: 'Projects',
@@ -1370,25 +1380,33 @@
     // Group rows (skills by category, ordered like the public site)
     const groupsOf = () => {
       if (!cfg.group) return [{ name: null, rows: rows.slice().sort(bySortOrder) }];
-      const order = (local?.skill_categories || []).map((c) => c.name.toLowerCase());
+      const order = (local?.skill_categories || []).map((c) => groupKey(c?.name));
+      // Same rule as the public site: categories match case-insensitively, first spelling wins
       const map = new Map();
       rows.forEach((row) => {
-        const key = cfg.group(row);
-        if (!map.has(key)) map.set(key, []);
-        map.get(key).push(row);
+        const key = groupKey(cfg.group(row));
+        if (!map.has(key)) map.set(key, { name: String(cfg.group(row) ?? '').trim(), rows: [] });
+        map.get(key).rows.push(row);
       });
-      const rank = (name) => {
-        const i = order.indexOf(String(name).toLowerCase());
+      const rank = (key) => {
+        const i = order.indexOf(key);
         return i === -1 ? 1000 : i;
       };
       return [...map.entries()]
-        .sort((a, b) => rank(a[0]) - rank(b[0]) || String(a[0]).localeCompare(String(b[0])))
-        .map(([name, list]) => ({ name, rows: list.sort(bySortOrder) }));
+        .sort((a, b) => rank(a[0]) - rank(b[0]) || a[1].name.localeCompare(b[1].name))
+        .map(([, group]) => ({ name: group.name, rows: group.rows.sort(bySortOrder) }));
     };
 
     const nextOrder = (groupName) => {
-      const peers = cfg.group ? rows.filter((r) => cfg.group(r) === groupName) : rows;
+      const peers = cfg.group ? rows.filter((r) => groupKey(cfg.group(r)) === groupKey(groupName)) : rows;
       return peers.reduce((max, r) => Math.max(max, Number(r.sort_order) || 0), 0) + 1;
+    };
+
+    // "security " → "Security" when that category already exists, so it joins the same card
+    const canonicalCategory = (value) => {
+      if (!cfg.categoryNames) return value;
+      const match = cfg.categoryNames(rows, local).find((name) => groupKey(name) === groupKey(value));
+      return match || value;
     };
 
     const guard = async (fn) => {
@@ -1479,13 +1497,14 @@
         fields: cfg.fields(),
         values,
         onSave: async (data) => {
+          if (cfg.categoryNames && typeof data.category === 'string') data.category = canonicalCategory(data.category);
           if (isNew) {
             data.sort_order = nextOrder(cfg.group ? data.category : null);
             const created = await api.insert(table, data);
             rows.push(created);
             toast(`“${cfg.titleOf(created)}” added.`);
           } else {
-            if (cfg.group && data.category !== row.category) data.sort_order = nextOrder(data.category);
+            if (cfg.group && groupKey(data.category) !== groupKey(row.category)) data.sort_order = nextOrder(data.category);
             const saved = await api.update(table, row.id, data);
             Object.assign(row, saved);
             toast('Changes saved.');

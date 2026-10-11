@@ -143,19 +143,21 @@
       </div>
     </section>
 
-    <!-- ============ Skills (signature: per-category themed sub-sections) ============ -->
+    <!-- ============ Skills (signature: category cards side by side, each with its own accent + ornament) ============ -->
     <section id="skills" class="skills section--dark" aria-labelledby="skills-title">
-      <div class="container skills__intro">
-        <h2 id="skills-title" class="section-title reveal">Skills</h2>
-      </div>
+      <div class="container">
+        <h2 id="skills-title" class="skills__headline reveal">
+          <span class="skills__lead">Skills,</span>
+          <em class="skills__accent gradient-text">in practice.</em>
+          <span class="skills__rest">Understanding systems, one layer at a time.</span>
+        </h2>
 
-      <!-- Rendered from the skills table (fallback: data.json) by script.js -->
-      <div id="skills-root" class="skills__root">
-        <noscript><p class="container load-error">Enable JavaScript to view the skills list.</p></noscript>
-      </div>
+        <!-- Category cards rendered from the skills table (fallback: data.json) by script.js -->
+        <div id="skills-root" class="skills__root reveal">
+          <noscript><p class="load-error">Enable JavaScript to view the skills list.</p></noscript>
+        </div>
 
-      <div class="skills__closing">
-        <p class="container reveal">Still learning — through <span class="gradient-text">coursework</span>, <span class="gradient-text">team projects</span>, and <span class="gradient-text">community</span>.</p>
+        <p class="skills__closing reveal">Still learning — through <span class="gradient-text">coursework</span>, <span class="gradient-text">team projects</span>, and <span class="gradient-text">community</span>.</p>
       </div>
     </section>
 
