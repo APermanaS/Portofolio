@@ -1604,6 +1604,38 @@ address { font-style: normal; }
   stroke-linejoin: round;
 }
 
+/* "Additional links": the same chips, one per row, each with its optional description.
+   Long labels wrap inside the chip instead of overflowing the modal on small screens. */
+.link-list--stacked {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.link-item {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.link-item .link-chip {
+  max-width: 100%;
+  padding-block: 10px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.link-item .link-chip svg { flex: none; }
+
+.modal__block .link-item__desc {
+  max-width: 68ch;
+  padding-inline: var(--space-2);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-on-light-muted);
+}
+
 /* Image viewer */
 .modal--image {
   width: min(1200px, calc(100% - var(--space-4)));

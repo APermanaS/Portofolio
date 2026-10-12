@@ -10,7 +10,7 @@
    5. Content loading (Supabase → data.json fallback)
    6. Profile (hero, about, stats, contact, CV, photo)
    7. Skills
-   8. Projects + project modal
+   8. Projects + project modal (incl. the project's "Additional links")
    9. Dialog plumbing (shared by all modals)
    10. Organization Experience (bullets + per-bullet evidence photos) + Education
    11. Certifications + image modal
@@ -334,7 +334,7 @@
   const COLUMNS = {
     profile: 'name, tagline, subtagline, about_text, stats, email, linkedin, github, photo_url, cv_url, hidden_sections',
     skills: 'id, category, name, level, icon_url, sort_order',
-    projects: 'id, title, category, short_desc, detail_desc, role, tools, result, period, repo_url, image_url, doc_url, sort_order',
+    projects: 'id, title, category, short_desc, detail_desc, role, tools, result, period, repo_url, image_url, doc_url, external_links, sort_order',
     experience: 'id, organization, role, location, start_date, end_date, is_current, show_months, bullets, bullet_items, logo_url, sort_order',
     education: 'id, institution, degree, field_of_study, start_date, end_date, end_label, gpa, description, logo_url, show_months, sort_order',
     certificates: 'id, title, issuer, issued_date, expiry_date, credential_url, image_url, sort_order'
@@ -345,9 +345,11 @@
    * site keeps showing the saved Supabase content instead of dropping to data.json.
    *   profile / certificates → 2026-10-11 (experience + education migration)
    *   experience             → 2026-10-12 (bullet_items, evidence photos)
+   *   projects               → 2026-10-12 (external_links, additional project links)
    */
   const LEGACY_COLUMNS = {
     profile: 'name, tagline, subtagline, about_text, stats, email, linkedin, github, photo_url, cv_url',
+    projects: 'id, title, category, short_desc, detail_desc, role, tools, result, period, repo_url, image_url, doc_url, sort_order',
     experience: 'id, organization, role, location, start_date, end_date, is_current, show_months, bullets, logo_url, sort_order',
     certificates: 'id, title, issuer, issued_date, image_url, sort_order'
   };
@@ -1007,6 +1009,49 @@
     );
   }
 
+  /**
+   * Additional links of a project, in the saved order: [{ label, href, description }].
+   * project-links.js keeps only https:// links (javascript:, data:, http: … never
+   * reach an href); safeUrl checks every URL once more. A row from before the
+   * migration has no external_links and therefore no additional links.
+   */
+  function projectLinks(project) {
+    const core = window.ProjectLinks;
+    const stored = core
+      ? core.linksFromRow(project)
+      : (Array.isArray(project?.external_links) ? project.external_links : []).slice(0, 8);
+    return stored
+      .filter((link) => link && typeof link.label === 'string' && typeof link.url === 'string')
+      .map((link) => ({ label: clean(link.label), href: safeUrl(link.url), description: clean(link.description) }))
+      .filter((link) => link.label && /^https:\/\//.test(link.href));
+  }
+
+  /** "Additional links" block; null (no block at all) when the project has none. */
+  function buildExtraLinksBlock(project) {
+    const links = projectLinks(project);
+    if (!links.length) return null;
+    return h(
+      'section',
+      { class: 'modal__block' },
+      h('h3', {}, 'Additional links'),
+      h(
+        'ul',
+        { class: 'link-list link-list--stacked', role: 'list' },
+        links.map((link, i) => {
+          const descId = link.description ? `project-link-${i + 1}-desc` : null;
+          const chip = buildLinkChip(link.label, link.href);
+          if (descId) chip.setAttribute('aria-describedby', descId);
+          return h(
+            'li',
+            { class: 'link-item' },
+            chip,
+            descId ? h('p', { class: 'link-item__desc', id: descId }, link.description) : null
+          );
+        })
+      )
+    );
+  }
+
   function buildProjectDetail(project) {
     const chips = [project.category_label, project.period].filter(isFilled).map(clean);
     const detail = parseDetail(clean(project.detail_desc));
@@ -1018,7 +1063,8 @@
       block('Result / impact', project.result),
       ...detail.extra.map((b) => block(b.label, b.text)),
       buildDocumentBlock(project),
-      buildRepoBlock(project)
+      buildRepoBlock(project),
+      buildExtraLinksBlock(project)
     ];
 
     return [

@@ -31,6 +31,20 @@ Open `…/admin.html` and sign in with your admin email and password. The sessio
   - A line like `Login → Booking → Checkout` is shown as flow chips.
 - Every field has a character limit, shown as a counter under the field.
 
+## Project links
+
+- **Repository URL** and **Project document** work exactly as before and keep their own place in the project details.
+- **Additional links** (under *Project document*): extra links of your choice, shown in the project details under *Additional links*. Up to **8 per project**.
+  - **Add link** adds a card with three fields:
+    - **Label** (required, max 60 characters): the text visitors click. You choose it freely.
+    - **URL** (required, max 500 characters): a full address that starts with `https://`.
+    - **Short description** (optional, max 160 characters): shown under the link.
+  - The arrows move a link up or down and the bin removes it. Visitors see the links in this order.
+  - A card you leave completely empty is ignored.
+  - Only `https://` links are accepted. `http://`, `javascript:`, `data:` and other kinds of links are refused.
+  - If something is wrong, the message appears under the exact field and nothing is saved. What you typed stays in the form: fix it and press **Save** again. The same applies when saving fails, for example without a connection.
+  - On the site the links open in a new tab. A project without additional links shows no *Additional links* area.
+
 ## Experience, Education and Certificates
 
 - **Period:** pick a month and year for **Start** and **End**. In browsers without a month picker, type it as `2024-09`.
@@ -71,6 +85,10 @@ Drag a file onto the upload box or click **choose a file**. You see a preview an
 - If an admin page says *A database table is missing* or *The database is missing new columns*, run `supabase/migrations/20261011130000_experience_education.sql` once (see SETUP.md, step 3b).
 - If **Experience** says evidence photos need one more migration, run `supabase/migrations/20261012_experience_bullet_photos.sql` once (see SETUP.md, step 3c). Until then you can still edit the bullet text; nothing is lost.
 - **Files** shows evidence photos as *Experience “…” bullet 2 photo 1*, so they are never treated as unused. Deleting such a file from the Files page takes it off that bullet point and leaves the text alone.
+- If **Projects** says additional links need one more migration, run `supabase/migrations/20261012_project_custom_links.sql` once (see SETUP.md, step 3d). Until then everything else on the Projects page works as before.
+- An additional link can point to a file in storage (for example one copied with **Copy link** on the Files page). **Files** then shows it as used by *Project “…” link “…”*, so it is never cleaned up as unused. Deleting such a file from the Files page removes the links to it from the project.
+  - A project image or document that a link points to is also kept in storage when you replace or remove it in a project, or delete a project together with its files.
+  - Other uploads (profile photo, CV, skill icons, Experience / Education / Certificate images) don't check for links: replacing them there deletes the old file and the link stops working. Point additional links at project files or at addresses outside this site.
 - Skill categories are free text with suggestions, matched by name (capitalisation doesn't matter). Each category is one card in the Skills section. The five built-in categories (Security, Web Development, Networking/Server, Database, Tools) keep their colours and ornaments. A new category becomes a new card automatically, with the next free accent colour and a default ornament. A category with no visible skills is not shown.
 - Leave **Level** empty to show no level label on the tile.
 - Forgot your password? Reset it in Supabase under **Authentication → Users**.

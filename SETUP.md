@@ -92,6 +92,28 @@ It is safe to run again.
 
 > Until this file has run, everything keeps working: the public site retries its query without the new column and still shows your saved Supabase content, and **Admin → Experience** says so and lets you edit the bullet text as before (without photos).
 
+## 3d. Run the project links migration
+
+Every **existing** Supabase project needs this once (yours included). Run it any time after step 2. A brand-new project set up with the current `schema.sql` already has the column; running the file there too is harmless.
+
+File: **`supabase/migrations/20261012_project_custom_links.sql`**
+
+1. There is **nothing to find & replace** in this file. It adds no policies and needs no User UID.
+2. In Supabase, go to **SQL Editor → New query**, paste the whole file and click **Run**.
+   - Expected result: *Success. No rows returned.*
+3. Check **Table Editor → projects**: there is a new column `external_links`, and it is `[]` on every existing row. `repo_url` and `doc_url` are unchanged.
+
+What the file does:
+
+- Adds the column `projects.external_links` (`jsonb`, not null, default `[]`). Each element is one additional link: `{ "id": …, "label": …, "url": …, "description": … }`. The order of the list is the order on the site.
+- Adds a `CHECK` constraint (through the immutable helper function `public.project_external_links_valid`) that mirrors the admin form limits: at most 8 links with unique ids, labels of 1–60 characters, `https://` URLs up to 500 characters, optional descriptions up to 160 characters, and no other keys.
+- Leaves `repo_url` and `doc_url` exactly as they are. Seeds, converts and overwrites **nothing**: existing projects simply have no additional links.
+- Changes no RLS policy, no grant and no storage rule. The column is covered by the existing table grants and policies from `schema.sql`.
+
+It is safe to run again.
+
+> Until this file has run, everything keeps working: the public site retries its query without the new column and still shows your saved projects, and **Admin → Projects** says so and leaves the *Additional links* editor out.
+
 ## 4. Fill in `config.js`
 
 1. In Supabase, open **Project Settings → API Keys** (on some dashboards it is **Settings → API**).
@@ -160,6 +182,9 @@ Checklist:
 | *The database is missing new columns* | Run `supabase/migrations/20261011130000_experience_education.sql` (step 3b), then reload the admin page. |
 | Admin → Experience says *Evidence photos … need one more migration* | Run `supabase/migrations/20261012_experience_bullet_photos.sql` (step 3c), then reload the admin page. |
 | Evidence photos don't show on the public site | Make sure `experience-bullets.js` is deployed next to `index.html`, and that step 3c has run. Check the browser console for `Supabase:` warnings. |
+| Admin → Projects says *Additional links for projects need one more migration* | Run `supabase/migrations/20261012_project_custom_links.sql` (step 3d), then reload the admin page. |
+| Admin says *project-links.js couldn't be loaded* | Deploy `project-links.js` next to `admin.html` and `index.html`, then reload. |
+| Additional links don't show on the public site | Make sure `project-links.js` is deployed next to `index.html`, that step 3d has run, and that each link starts with `https://`. |
 | *permission denied for table experience / education* | The grants are missing. Re-run the migration from step 3b. |
 | *permission denied for table …* in the browser console | The grants are missing. Re-run `schema.sql`. |
 | Public site still shows old text | It uses `data.json` whenever a table is empty or Supabase can't be reached. Check the browser console for `Supabase:` warnings. |

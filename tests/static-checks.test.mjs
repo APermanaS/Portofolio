@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (name) => readFileSync(join(repo, name), 'utf8');
 
-const SCRIPTS = ['experience-bullets.js', 'script.js', 'admin.js', 'hero-meteors.js', 'section-gradients.js', 'config.js'];
+const SCRIPTS = ['experience-bullets.js', 'project-links.js', 'script.js', 'admin.js', 'hero-meteors.js', 'section-gradients.js', 'config.js'];
 
 test('every browser script parses', () => {
   for (const file of SCRIPTS) {
@@ -125,4 +125,118 @@ test('the migration limits match the shared core limits', () => {
   assert.match(sql, /\(photo ->> 'url'\) ~ '\^https:\/\//);
   assert.equal(EB.isHttpsUrl('http://x.test/a.png'), false);
   assert.equal(EB.isHttpsUrl('https://x.test/a.png'), true);
+});
+
+/* ========================================================================
+   Project additional links (projects.external_links)
+   ======================================================================== */
+
+const LINKS_MIGRATION = 'supabase/migrations/20261012_project_custom_links.sql';
+const withoutComments = (sql) => sql.replace(/--[^\n]*/g, '');
+
+test('data.json projects declare empty additional links and keep repo_url / doc_url', () => {
+  const data = JSON.parse(read('data.json'));
+  assert.ok(Array.isArray(data.projects) && data.projects.length > 0);
+  for (const project of data.projects) {
+    assert.deepEqual(project.external_links, [], 'no invented links in the offline fallback');
+    assert.ok('repo_url' in project && 'doc_url' in project, 'existing link fields stay');
+  }
+});
+
+test('the public query asks for external_links and retries the legacy column list without it', () => {
+  const script = read('script.js');
+  const columns = /const COLUMNS = \{([\s\S]*?)\n  \};/.exec(script)?.[1] || '';
+  const legacy = /const LEGACY_COLUMNS = \{([\s\S]*?)\n  \};/.exec(script)?.[1] || '';
+  const projects = /projects: '([^']+)'/.exec(columns)?.[1] || '';
+  const legacyProjects = /projects: '([^']+)'/.exec(legacy)?.[1] || '';
+
+  assert.ok(projects.includes('external_links'), 'COLUMNS.projects selects external_links');
+  assert.ok(legacyProjects, 'LEGACY_COLUMNS.projects exists so a pre-migration database still loads');
+  assert.ok(!legacyProjects.includes('external_links'));
+  assert.equal(projects.replace(', external_links', ''), legacyProjects, 'the retry asks for exactly the old columns');
+});
+
+test('both pages load the shared project-links core before their own script', () => {
+  for (const [page, main] of [['index.html', 'script.js'], ['admin.html', 'admin.js']]) {
+    const html = read(page);
+    const core = html.indexOf('src="project-links.js"');
+    assert.ok(core !== -1, `${page} must load project-links.js`);
+    assert.ok(core < html.indexOf(`src="${main}"`), `${page} must load the core before ${main}`);
+  }
+});
+
+test('additional links are rendered as safe, accessible external links', () => {
+  const script = read('script.js');
+  const block = /function buildExtraLinksBlock[\s\S]*?\n  }\n/.exec(script)?.[0] || '';
+  assert.ok(block, 'buildExtraLinksBlock exists');
+  assert.match(block, /if \(!links\.length\) return null;/, 'no block without links');
+  assert.match(block, /buildLinkChip\(link\.label, link\.href\)/, 'reuses the existing link chip');
+  assert.match(script, /function buildLinkChip[\s\S]*?rel: 'noopener noreferrer'/);
+  assert.match(script, /href: safeUrl\(link\.url\)/, 'every URL goes through safeUrl');
+  assert.match(script, /\/\^https:\\\/\\\/\/\.test\(link\.href\)/, 'only https hrefs survive');
+});
+
+test('the admin link editor reuses the shared validation and the existing URL / text patterns', () => {
+  const admin = read('admin.js');
+  const core = read('project-links.js');
+  assert.match(admin, /name: 'external_links', label: 'Additional links', type: 'projectLinks'/);
+  assert.match(admin, /PL\.validateLinks\(collect\(\), \{ maxItems \}\)/);
+  assert.match(admin, /api\.hasColumn\('projects', 'external_links'\)/);
+  assert.match(admin, /else delete data\.external_links;/, 'never writes the column before the migration');
+
+  const httpsRe = (src) => /const HTTPS_RE = (\/.+\/);/.exec(src)?.[1];
+  assert.equal(httpsRe(core), httpsRe(admin), 'same https pattern as the other admin URL fields');
+  const controlRe = (src) => /\.replace\((\/\[\\u0000-[^/]+\/g)/.exec(src)?.[1];
+  assert.equal(controlRe(core), controlRe(admin), 'same control / bidi character stripping as admin.js');
+});
+
+test('the links migration is additive and idempotent, seeds nothing and leaves RLS alone', () => {
+  const sql = read(LINKS_MIGRATION);
+  const statements = withoutComments(sql);
+
+  assert.match(statements, /^\s*begin;/i);
+  assert.match(statements, /commit;\s*$/i);
+  assert.match(statements, /add column if not exists external_links jsonb not null default '\[\]'::jsonb/i);
+  assert.match(statements, /create or replace function public\.project_external_links_valid\(links jsonb\)/i);
+  assert.match(statements, /drop constraint if exists projects_external_links_shape/i);
+  assert.match(statements, /add constraint projects_external_links_shape\s+check \(public\.project_external_links_valid\(external_links\)\)/i);
+
+  // SQL code only: string literals (e.g. the column comment, which may mention repo_url) are blanked.
+  const code = statements.replace(/'(?:[^']|'')*'/g, "''");
+  for (const forbidden of [/drop column/i, /drop table/i, /delete from/i, /truncate/i, /insert into/i, /alter column/i, /\bupdate\s+public\./i,
+    /\bpolicy\b/i, /\bgrant\b/i, /\brevoke\b/i, /row level security/i, /storage\./i, /repo_url/i, /doc_url/i]) {
+    assert.ok(!forbidden.test(code), `the migration must not contain ${forbidden}`);
+  }
+  assert.ok(!/ADMIN_UUID_HERE/.test(statements), 'this migration needs no admin UUID');
+});
+
+test('the links migration limits match the shared core limits', () => {
+  const sql = read(LINKS_MIGRATION);
+  const PL = createRequire(import.meta.url)('../project-links.js');
+  const L = PL.LIMITS;
+
+  assert.match(sql, new RegExp(`jsonb_array_length\\(links\\) <= ${L.items}`));
+  assert.match(sql, new RegExp(`char_length\\(link ->> 'id'\\) between 1 and ${L.id}`));
+  assert.match(sql, new RegExp(`char_length\\(link ->> 'label'\\) between 1 and ${L.label}`));
+  assert.match(sql, new RegExp(`char_length\\(link ->> 'url'\\) <= ${L.url}`));
+  assert.match(sql, new RegExp(`char_length\\(coalesce\\(link ->> 'description', ''\\)\\) <= ${L.description}`));
+  assert.match(sql, /\(link ->> 'url'\) ~ '\^https:\/\//, 'https only, like the other url columns');
+  assert.match(sql, /key_name not in \('id', 'label', 'url', 'description'\)/);
+  assert.equal(PL.isHttpsUrl('javascript:alert(1)'), false);
+  assert.equal(PL.isHttpsUrl('https://example.com/'), true);
+});
+
+test('schema.sql defines the same column and validation function for new installations', () => {
+  const fnBody = (sql) => /create or replace function public\.project_external_links_valid[\s\S]*?\$fn\$;/.exec(sql)?.[0];
+  const schema = read('supabase/schema.sql');
+  const migration = read(LINKS_MIGRATION);
+
+  assert.ok(fnBody(schema), 'schema.sql contains the helper function');
+  assert.equal(fnBody(schema), fnBody(migration), 'the two copies of the function are identical');
+  assert.ok(schema.indexOf('function public.project_external_links_valid') < schema.indexOf('create table if not exists public.projects'),
+    'the function exists before the table that uses it');
+  const projectsTable = /create table if not exists public\.projects \(([\s\S]*?)\n\);/.exec(schema)?.[1] || '';
+  assert.match(projectsTable, /external_links jsonb not null default '\[\]'::jsonb\s+constraint projects_external_links_shape check \(public\.project_external_links_valid\(external_links\)\)/);
+  assert.match(projectsTable, /repo_url\s+text check/);
+  assert.match(projectsTable, /doc_url\s+text check/);
 });
