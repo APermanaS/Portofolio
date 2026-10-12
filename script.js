@@ -12,7 +12,7 @@
    7. Skills
    8. Projects + project modal
    9. Dialog plumbing (shared by all modals)
-   10. Organization Experience + Education
+   10. Organization Experience (bullets + per-bullet evidence photos) + Education
    11. Certifications + image modal
    12. Section visibility (hide empty / switched-off sections, keep black/white alternation)
    13. Boot
@@ -335,14 +335,20 @@
     profile: 'name, tagline, subtagline, about_text, stats, email, linkedin, github, photo_url, cv_url, hidden_sections',
     skills: 'id, category, name, level, icon_url, sort_order',
     projects: 'id, title, category, short_desc, detail_desc, role, tools, result, period, repo_url, image_url, doc_url, sort_order',
-    experience: 'id, organization, role, location, start_date, end_date, is_current, show_months, bullets, logo_url, sort_order',
+    experience: 'id, organization, role, location, start_date, end_date, is_current, show_months, bullets, bullet_items, logo_url, sort_order',
     education: 'id, institution, degree, field_of_study, start_date, end_date, end_label, gpa, description, logo_url, show_months, sort_order',
     certificates: 'id, title, issuer, issued_date, expiry_date, credential_url, image_url, sort_order'
   };
 
-  /** Columns from before the 2026-10-11 migration: used if the new columns don't exist yet. */
+  /**
+   * Columns from before a migration: used if the new columns don't exist yet, so the
+   * site keeps showing the saved Supabase content instead of dropping to data.json.
+   *   profile / certificates → 2026-10-11 (experience + education migration)
+   *   experience             → 2026-10-12 (bullet_items, evidence photos)
+   */
   const LEGACY_COLUMNS = {
     profile: 'name, tagline, subtagline, about_text, stats, email, linkedin, github, photo_url, cv_url',
+    experience: 'id, organization, role, location, start_date, end_date, is_current, show_months, bullets, logo_url, sort_order',
     certificates: 'id, title, issuer, issued_date, image_url, sort_order'
   };
 
@@ -1141,7 +1147,92 @@
   const bulletList = (value) =>
     (Array.isArray(value) ? value : []).filter((item) => typeof item === 'string' && isFilled(item)).map(clean).slice(0, 8);
 
-  function buildExperienceItem(entry) {
+  /**
+   * Bullet points of one entry as objects: { id, text, photos: [{ url, caption }] }.
+   * bullet_items wins when it is an array (an empty array means "no bullets on
+   * purpose"); a row that predates that column falls back to the `bullets` strings.
+   * experience-bullets.js does the conversion; without it, text-only bullets still show.
+   */
+  function experienceBullets(entry) {
+    const core = window.ExperienceBullets;
+    if (core) return core.itemsFromRow(entry, { maxItems: 8 });
+    return bulletList(entry?.bullets).map((text) => ({ id: null, text, photos: [] }));
+  }
+
+  /** Open one evidence photo in the shared image modal (Esc / close button / backdrop). */
+  function openImageModal(modal, { src, alt, caption }, opener) {
+    const slot = $('.modal__image-slot', modal);
+    const full = h('img', { alt, decoding: 'async' });
+    bindImage(full, () => slot.replaceChildren(placeholder({ variant: 'dark', glyph: 'image' })));
+    full.src = src;
+    slot.replaceChildren(full);
+    $('.modal__caption', modal).textContent = caption;
+    openDialog(modal, opener);
+  }
+
+  /**
+   * Compact evidence thumbnails for ONE bullet point. Returns null when the bullet
+   * has no usable photo, so a bullet without evidence stays completely clean.
+   * A thumbnail that fails to load removes itself (never a broken or empty box).
+   */
+  function buildBulletEvidence(photos, { text, organization }, modal) {
+    if (!modal || !Array.isArray(photos) || !photos.length) return null;
+
+    const list = h('ul', { class: 'xp-evidence', role: 'list' });
+    const usable = photos.filter((photo) => safeUrl(photo?.url));
+
+    usable.forEach((photo, index) => {
+      const src = safeUrl(photo.url);
+      const caption = clean(photo.caption);
+      const position = usable.length > 1 ? ` ${index + 1} of ${usable.length}` : '';
+      // Alt text describes the evidence; with a caption the caption carries the meaning.
+      const alt = caption || [`Evidence${position} for: ${text}`, organization].filter(Boolean).join(' — ');
+      const button = h('button', {
+        class: 'xp-evidence__btn',
+        type: 'button',
+        'aria-haspopup': 'dialog',
+        'aria-label': `View evidence photo${position} larger: ${caption || text}`
+      });
+      const img = h('img', { class: 'xp-evidence__img', alt: caption ? '' : alt, width: 320, height: 240, loading: 'lazy', decoding: 'async' });
+      const item = h(
+        'li',
+        { class: 'xp-evidence__item' },
+        h(
+          'figure',
+          { class: 'xp-evidence__figure' },
+          button,
+          caption ? h('figcaption', { class: 'xp-evidence__caption' }, caption) : null
+        )
+      );
+
+      button.append(img, h('span', { class: 'xp-evidence__zoom', 'aria-hidden': 'true' }, icon('expand')));
+      button.addEventListener('click', () =>
+        openImageModal(modal, { src, alt, caption: [caption || text, organization].filter(Boolean).join(' — ') }, button)
+      );
+
+      // In the list before the image starts loading, so a failing photo can remove itself.
+      list.append(item);
+      bindImage(img, () => {
+        item.remove();
+        if (!list.children.length) list.remove();
+      });
+      img.src = src;
+    });
+
+    return list.children.length ? list : null;
+  }
+
+  function buildBullet(item, context, modal) {
+    const evidence = buildBulletEvidence(item.photos, { text: item.text, organization: context.organization }, modal);
+    return h(
+      'li',
+      { class: `xp-bullet${evidence ? ' has-evidence' : ''}` },
+      h('span', { class: 'xp-bullet__text' }, item.text),
+      evidence
+    );
+  }
+
+  function buildExperienceItem(entry, modal) {
     const organization = clean(entry.organization);
     const role = clean(entry.role);
     const location = clean(entry.location);
@@ -1150,7 +1241,7 @@
     const start = formatMonth(entry.start_date, showMonths);
     const end = current ? 'Present' : formatMonth(entry.end_date, showMonths);
     const period = periodText(start, end);
-    const bullets = bulletList(entry.bullets);
+    const bullets = experienceBullets(entry).filter((item) => isFilled(item.text));
 
     const chips = [
       period ? h('span', { class: `xp-chip${current ? ' xp-chip--now' : ''}` }, period) : null,
@@ -1176,7 +1267,9 @@
           )
         ),
         chips.length ? h('p', { class: 'xp-card__meta' }, chips) : null,
-        bullets.length ? h('ul', { class: 'xp-card__bullets', role: 'list' }, bullets.map((text) => h('li', {}, text))) : null
+        bullets.length
+          ? h('ul', { class: 'xp-card__bullets', role: 'list' }, bullets.map((item) => buildBullet(item, { organization }, modal)))
+          : null
       )
     );
   }
@@ -1185,10 +1278,11 @@
   function renderExperience({ rows }) {
     const root = $('#experience-root');
     if (!root) return 0;
+    const modal = $('#image-modal');
     const entries = (rows || [])
       .filter((row) => row?.is_visible !== false && isFilled(row?.organization))
       .sort(byOrderThenStart);
-    replaceRevealing(root, entries.map(buildExperienceItem));
+    replaceRevealing(root, entries.map((entry) => buildExperienceItem(entry, modal)));
     return entries.length;
   }
 

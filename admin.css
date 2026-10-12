@@ -717,9 +717,26 @@ svg {
   .stats-editor__label { grid-column: 1 / -1; }
 }
 
-/* Bullet points repeater (Experience) */
+/* Bullet points repeater (Experience) — one card per bullet, so it is obvious
+   which evidence photos belong to which line. */
 .bullets-editor { display: grid; gap: 10px; justify-items: start; }
-.bullets-editor__list { display: grid; gap: 8px; width: 100%; }
+.bullets-editor__list { display: grid; gap: 10px; width: 100%; }
+
+.bullets-editor__item {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-tile);
+  background: #fbfbfd;
+}
+
+/* Without photos (column not migrated yet) the row keeps its original plain look */
+.bullets-editor--no-photos .bullets-editor__item {
+  padding: 0;
+  border: 0;
+  background: none;
+}
 
 .bullets-editor__row {
   display: grid;
@@ -733,6 +750,65 @@ svg {
   height: 6px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--blue), var(--purple));
+}
+
+.bullets-editor__photos {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  padding-left: 18px;
+}
+
+.bullets-editor__legend {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* One evidence photo: compact thumbnail + caption + actions */
+.photo-slots { display: grid; gap: 8px; width: 100%; }
+
+.photo-slot {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-tile);
+  background: var(--white);
+}
+
+.photo-slot.has-error { border-color: var(--red); }
+.photo-slot.is-busy { opacity: 0.85; }
+.photo-slot.is-dragover { outline: 2px dashed var(--blue); outline-offset: 3px; }
+
+.photo-slot__media {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 57px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--light);
+}
+
+.photo-slot__img { width: 100%; height: 100%; object-fit: cover; }
+.photo-slot__glyph { display: grid; place-items: center; color: var(--muted); }
+.photo-slot__glyph svg { width: 20px; height: 20px; }
+
+.photo-slot__main { display: grid; gap: 6px; min-width: 0; }
+.photo-slot__meta { font-size: 12px; color: var(--muted); }
+.photo-slot__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+
+.input--compact { padding: 7px 10px; font-size: 14px; }
+
+@media (max-width: 560px) {
+  .bullets-editor__photos { padding-left: 0; }
+  .photo-slot { grid-template-columns: minmax(0, 1fr); }
+  .photo-slot__media { width: 100%; height: 96px; }
 }
 
 /* A field greyed out by a checkbox (e.g. End while "I'm currently here" is ticked) */

@@ -51,6 +51,8 @@ One change per prompt. Do not touch unrelated sections.
 Keep decorations lightweight (CSS/SVG only) and respect prefers-reduced-motion
 
 Content is managed in admin.html (Supabase). Render database text with textContent only.
+Image URLs from the database are validated (safeUrl: https:// or a repo-local assets/ path) before
+they reach a src attribute.
 
 Missing files show a placeholder ("Document coming soon", image placeholder), never a broken layout.
 
@@ -118,3 +120,31 @@ Change Log
   gradient words in the Skills closing line are bold (large text). Animated section gradients: Bloom Field on
   black sections, Pipo on white sections (style.css §18, new section-gradients.js, static .section-gradient
   layers in index.html). Hero, footer, admin and data unchanged.
+- 2026-10-12 · Organization Experience · Each Experience BULLET POINT can now carry its own optional
+  evidence photos (not just one logo per organization). A bullet is an object
+  { id, text, photos: [{ url, caption }] }, so reordering moves the complete bullet with its photos —
+  photos are never tied to an array position. New shared core experience-bullets.js (plain script,
+  loaded by index.html and admin.html, also required by tests/): legacy ↔ new conversion, validation,
+  reordering, storage-reference scanning and the upload session that decides what may be deleted.
+  Data: supabase/migrations/20261012_experience_bullet_photos.sql adds the nullable jsonb column
+  experience.bullet_items plus a CHECK (via the immutable helper experience_bullet_items_valid:
+  max 8 bullets, 300 chars each, max 4 photos, https-only urls, captions ≤ 160). Additive and
+  idempotent; it seeds, converts and overwrites nothing, and touches no policy, grant or storage rule.
+  bullet_items NULL = read the legacy bullets strings, [] = intentionally empty; an explicit successful
+  Save writes bullet_items AND the matching bullets strings. The public query asks for bullet_items and
+  retries with the old column list when it is missing, so saved Supabase content keeps showing.
+  Public: compact thumbnails (112×84, 132×99 ≥734px) under their own bullet, gradient-dot bullets,
+  timeline and card style unchanged; a bullet without photos renders nothing extra. A thumbnail opens
+  the existing #image-modal (close button, Esc, focus returns to the thumbnail, alt text from the
+  caption or "Evidence for: <bullet> — <organization>"); captions show under the thumbnail. A photo
+  that fails to load removes its own thumbnail instead of leaving an empty box. prefers-reduced-motion
+  drops the hover lift and keeps the zoom badge visible. Admin: the Experience bullet editor is now one
+  card per bullet with its own photo area (add / preview / replace / remove, caption field, up to 4),
+  reusing FILE_KINDS.image + validateFile (extension, MIME, file-signature, no SVG, 5 MB) and
+  uploadFile; Save is blocked while an upload runs, a failed Save deletes nothing (the original survives
+  for a retry), Cancel deletes only the unsaved uploads, and a storage object another entry still
+  references is kept. Files page scans bullet_items[].photos[] ("Experience … bullet 2 photo 1"), so
+  evidence photos are never listed as unused, and clearing such a reference rewrites bullet_items
+  without touching the text. Admin → Experience explains the migration if the column is missing and
+  stays usable as a text-only editor until then. Other sections, auth, RLS, config.js and CNAME
+  unchanged. Tests: node --test "tests/*.test.mjs" (mocked Supabase/Storage, no dependencies).

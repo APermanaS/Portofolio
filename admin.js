@@ -72,13 +72,23 @@
     skills: { category: 60, name: 120, level: 40 },
     projects: { title: 150, short_desc: 300, detail_desc: 6000, role: 1500, tools: 1500, result: 2000, period: 60, repo_url: 300 },
     certificates: { title: 200, issuer: 120, credential_url: 500 },
-    experience: { organization: 150, role: 150, location: 120, bullets: 6, bullet: 300 },
+    experience: { organization: 150, role: 150, location: 120, bullets: 6, bullet: 300, photos: 4, caption: 160 },
     education: { institution: 150, degree: 150, field_of_study: 150, end_label: 60, gpa: 30, description: 1000 },
     cvFileName: 255
   };
 
   /** File of the 2026-10-11 migration (shown in "missing column / table" messages). */
   const MIGRATION_FILE = 'supabase/migrations/20261011130000_experience_education.sql';
+
+  /** File of the 2026-10-12 migration (experience.bullet_items = bullet evidence photos). */
+  const BULLET_MIGRATION_FILE = 'supabase/migrations/20261012_experience_bullet_photos.sql';
+
+  /**
+   * experience-bullets.js, loaded just before this file. Shared with the public site:
+   * bullet_items ↔ legacy bullets, validation, reordering, storage references and the
+   * upload session that decides what may be deleted on save / cancel.
+   */
+  const EB = window.ExperienceBullets || null;
 
   function readConfig() {
     const cfg = window.PORTFOLIO_CONFIG || {};
@@ -394,7 +404,24 @@
       if (!rows?.length) throw new Error(PERMISSION_MESSAGE);
     },
     profile: () => run(sb.from('profile').select('*').eq('id', 1).maybeSingle()),
-    saveProfile: (values) => run(sb.from('profile').upsert({ id: 1, ...values }).select().single())
+    saveProfile: (values) => run(sb.from('profile').upsert({ id: 1, ...values }).select().single()),
+    /**
+     * Is this column already there? Lets a page degrade politely (and explain which
+     * migration to run) instead of failing every save.
+     */
+    async hasColumn(table, column) {
+      try {
+        const { error } = await sb.from(table).select(column).limit(1);
+        if (!error) return true;
+        const code = String(error.code || '');
+        if (code === '42703' || code === 'PGRST204' || code === '42P01' || code === 'PGRST205') return false;
+        throw friendlyDbError(error);
+      } catch (error) {
+        if (error instanceof SessionError) throw error;
+        console.warn(`Could not detect ${table}.${column}`, error);
+        return false;
+      }
+    }
   };
 
   let localDataPromise = null;
@@ -858,89 +885,445 @@
         field: { name, label, type, max, required, hint, rows, options, kind, list, full,
                  disables (checkbox: name of the field it disables while ticked),
                  infoFields (upload: { name, date } columns with the original file name / time),
-                 maxItems / itemMax (bullets) }
+                 maxItems / itemMax / maxPhotos / captionMax / photos / isReferenced
+                   (bulletItems) }
         types: text | textarea | email | url | date | month | select | switch | checkbox |
-               upload | stats | bullets | heading
+               upload | stats | bulletItems | heading
      ------------------------------------------------------------------------ */
 
-  /** Bullet points: one line each; add, remove and reorder. Value = array of strings. */
-  function createBulletsField(field, value) {
-    const maxItems = field.maxItems || 6;
-    const itemMax = field.itemMax || 300;
+  /**
+   * One evidence photo of one bullet point.
+   *
+   * Reuses the existing image pipeline exactly: FILE_KINDS.image (JPG / PNG / WebP,
+   * max 5 MB, no SVG), validateFile (extension + MIME + file-signature check),
+   * randomPath and uploadFile (XHR with real progress). Only the layout is compact,
+   * so it is obvious which photos belong to which bullet.
+   *
+   * Storage lifecycle is owned by `session` (experience-bullets.js):
+   *   * a brand-new upload the user removes again is deleted straight away;
+   *   * a photo that was already saved is only deleted by session.commit(), i.e.
+   *     AFTER the form saved successfully — a failed save keeps the original.
+   */
+  function createPhotoSlot({ session, photo = null, captionMax, onRemove, onChange }) {
+    const kindKey = 'image';
+    const kind = FILE_KINDS[kindKey];
+    const id = nextId('evidence');
+
+    const state = {
+      original: photo?.url || null,
+      current: photo?.url || null,
+      busy: false,
+      preview: null, // { objectUrl, name, size } of a freshly chosen file
+      label: 'Evidence photo'
+    };
+
+    const accept = [...Object.keys(kind.types), ...Object.values(kind.types).flat().map((e) => `.${e}`)].join(',');
+    const input = h('input', { type: 'file', id, accept, class: 'visually-hidden', tabindex: '-1', 'aria-hidden': 'true' });
+    const error = h('p', { class: 'field__error', role: 'alert', hidden: true });
+    const caption = h('input', {
+      class: 'input input--compact',
+      type: 'text',
+      value: photo?.caption || '',
+      maxlength: String(captionMax),
+      placeholder: 'Caption (optional)'
+    });
+    const media = h('div', { class: 'photo-slot__media' });
+    const meta = h('p', { class: 'photo-slot__meta' });
+    const actions = h('div', { class: 'photo-slot__actions' });
+    const root = h(
+      'li',
+      { class: 'photo-slot' },
+      media,
+      h('div', { class: 'photo-slot__main' }, caption, meta, actions, error),
+      input
+    );
+
+    const changed = () => onChange?.();
+    const showError = (message) => {
+      error.textContent = message || '';
+      error.hidden = !message;
+      root.classList.toggle('has-error', Boolean(message));
+    };
+    const pick = () => {
+      if (!state.busy) input.click();
+    };
+
+    const clearPreview = () => {
+      if (state.preview?.objectUrl) URL.revokeObjectURL(state.preview.objectUrl);
+      state.preview = null;
+    };
+
+    function renderMedia() {
+      const src = state.preview?.objectUrl || state.current;
+      const glyph = () => media.replaceChildren(h('span', { class: 'photo-slot__glyph', 'aria-hidden': 'true' }, icon('image')));
+      if (!src) {
+        glyph();
+        return;
+      }
+      const img = h('img', { class: 'photo-slot__img', alt: '', decoding: 'async' });
+      img.addEventListener('error', glyph, { once: true });
+      img.src = src;
+      media.replaceChildren(img);
+    }
+
+    function render() {
+      renderMedia();
+      caption.disabled = !state.current;
+      const textBtn = (label, onclick, danger = false) =>
+        h('button', { class: `text-btn${danger ? ' text-btn--danger' : ''}`, type: 'button', onclick }, label);
+
+      if (state.current) {
+        const saved = state.current === state.original;
+        meta.textContent = state.preview
+          ? `${formatBytes(state.preview.size)} · uploaded — save to apply`
+          : saved
+            ? 'Saved photo'
+            : 'Uploaded — save to apply';
+        actions.replaceChildren(
+          h('a', { class: 'text-btn', href: state.current, target: '_blank', rel: 'noopener noreferrer' }, 'Open', icon('external')),
+          textBtn('Replace', replace),
+          textBtn('Remove', remove, true)
+        );
+      } else {
+        meta.textContent = kind.hint;
+        actions.replaceChildren(
+          h('button', { class: 'btn btn--secondary btn--small', type: 'button', onclick: pick }, icon('upload'), 'Choose image'),
+          textBtn('Remove', remove, true)
+        );
+      }
+      relabel(state.label);
+    }
+
+    /** Keeps the accessible names in step with the current bullet / photo position. */
+    function relabel(label) {
+      state.label = label;
+      caption.setAttribute('aria-label', `Caption for ${label}`);
+      $$('button, a', actions).forEach((node) => {
+        const text = node.textContent.trim();
+        node.setAttribute('aria-label', `${text} — ${label}`);
+      });
+    }
+
+    function renderProgress(name, size) {
+      const bar = h('span', { class: 'progress__bar' });
+      const pct = h('span', { class: 'progress__pct' }, '0%');
+      const meter = h('div', {
+        class: 'progress',
+        role: 'progressbar',
+        'aria-valuemin': '0',
+        'aria-valuemax': '100',
+        'aria-valuenow': '0',
+        'aria-label': `Uploading ${name}`
+      }, bar);
+      meta.replaceChildren(`Uploading… ${formatBytes(size)}`);
+      actions.replaceChildren(h('div', { class: 'progress__row' }, meter, pct));
+      return (ratio) => {
+        const value = Math.round(ratio * 100);
+        bar.style.width = `${value}%`;
+        pct.textContent = `${value}%`;
+        meter.setAttribute('aria-valuenow', String(value));
+      };
+    }
+
+    async function replace() {
+      if (state.current === state.original && pathFromUrl(state.original)) {
+        const answer = await ask({
+          title: 'Replace this photo?',
+          message: 'You will choose a new image next. The current photo is only deleted from storage once the entry has been saved successfully.',
+          okLabel: 'Choose new image',
+          danger: false
+        });
+        if (!answer.ok) return;
+      }
+      pick();
+    }
+
+    async function remove() {
+      if (state.busy) {
+        toast('Please wait until the photo has finished uploading.', 'info');
+        return;
+      }
+      if (state.current) {
+        const isNewUpload = state.current !== state.original;
+        const answer = await ask({
+          title: 'Remove this photo?',
+          message: isNewUpload
+            ? 'This new upload will be deleted from storage now.'
+            : 'The photo will be deleted from storage when you save, unless it is still used somewhere else.',
+          okLabel: 'Remove'
+        });
+        if (!answer.ok) return;
+        await session.discardUpload(state.current); // no-op for an already saved photo
+      }
+      clearPreview();
+      onRemove?.();
+      changed();
+    }
+
+    async function handleFile(file) {
+      showError('');
+      if (!file || state.busy) return;
+      const check = await validateFile(file, kindKey);
+      if (!check.ok) {
+        showError(check.error);
+        return;
+      }
+
+      state.busy = true;
+      root.classList.add('is-busy');
+      const previous = state.current;
+      clearPreview();
+      state.preview = { objectUrl: URL.createObjectURL(file), name: file.name, size: file.size };
+      renderMedia();
+      const setProgress = renderProgress(file.name, file.size);
+      changed();
+
+      try {
+        const url = await uploadFile(file, randomPath(kindKey, check.ext), check.type, setProgress);
+        session.trackUpload(url);
+        state.current = url;
+        await session.discardUpload(previous); // an earlier unsaved upload is no longer needed
+        toast('Photo uploaded. Remember to save.');
+      } catch (err) {
+        clearPreview();
+        state.current = previous;
+        if (err instanceof SessionError) {
+          handleError(err);
+          return;
+        }
+        showError(err.message);
+      } finally {
+        state.busy = false;
+        root.classList.remove('is-busy');
+        if (root.isConnected) render();
+        changed();
+      }
+    }
+
+    input.addEventListener('change', () => {
+      const [file] = input.files;
+      input.value = '';
+      handleFile(file);
+    });
+
+    let depth = 0;
+    root.addEventListener('dragenter', (event) => {
+      event.preventDefault();
+      depth += 1;
+      root.classList.add('is-dragover');
+    });
+    root.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = state.busy ? 'none' : 'copy';
+    });
+    root.addEventListener('dragleave', () => {
+      depth = Math.max(0, depth - 1);
+      if (!depth) root.classList.remove('is-dragover');
+    });
+    root.addEventListener('drop', (event) => {
+      event.preventDefault();
+      depth = 0;
+      root.classList.remove('is-dragover');
+      const [file] = [...(event.dataTransfer?.files || [])];
+      if (file) handleFile(file);
+    });
+
+    if (state.original) session.seedOriginal(state.original);
+    render();
+
+    return {
+      element: root,
+      relabel,
+      isBusy: () => state.busy,
+      url: () => state.current,
+      focus: () => ($('button', actions) || caption).focus(),
+      raw: () => `${state.current || ''}|${state.current ? caption.value : ''}`,
+      /** null for a slot the user never filled in; the caption is dropped with it. */
+      read: () => (state.current ? { url: state.current, caption: sanitizeText(caption.value) } : null),
+      /** A photo that is gone after a successful save (so commit may delete it). */
+      markSaved: () => {
+        state.original = state.current;
+        clearPreview();
+        if (root.isConnected) render();
+      }
+    };
+  }
+
+  /**
+   * Bullet points with optional evidence photos.
+   * Value = the row's bullet_items; legacy `bullets` strings are converted in memory.
+   *
+   * The item array is the single source of truth, so moving a bullet moves its whole
+   * object (text + photos) — photos are never tied to an array position.
+   */
+  function createBulletItemsField(field, value, values = {}) {
+    const maxItems = field.maxItems || EB.LIMITS.items;
+    const itemMax = field.itemMax || EB.LIMITS.text;
+    const maxPhotos = field.maxPhotos || EB.LIMITS.photos;
+    const captionMax = field.captionMax || EB.LIMITS.caption;
+    const photosEnabled = field.photos !== false;
+
+    // Nothing is deleted from storage until the form saves successfully; a shared
+    // object is kept when field.isReferenced says another entry still points at it.
+    const session = EB.createUploadSession({
+      removeUrl: removeStorageUrl,
+      isReferenced: field.isReferenced || null,
+      onWarning: (err) => console.warn('Evidence photo cleanup', err)
+    });
+
     const list = h('ol', { class: 'bullets-editor__list', role: 'list' });
     const addBtn = h('button', { type: 'button', class: 'btn btn--secondary btn--small' }, icon('plus'), 'Add bullet point');
     const changed = () => list.dispatchEvent(new Event('input', { bubbles: true }));
 
-    const rowsOf = () => $$('.bullets-editor__row', list);
+    /** [{ id, input, slots: [photoSlot], element, photoList, addPhotoBtn, label }] */
+    const items = [];
 
     const refresh = () => {
-      const rows = rowsOf();
-      rows.forEach((row, i) => {
-        $('[data-act="up"]', row).disabled = i === 0;
-        $('[data-act="down"]', row).disabled = i === rows.length - 1;
-        $('input', row).setAttribute('aria-label', `Bullet point ${i + 1}`);
+      items.forEach((item, i) => {
+        const position = `bullet point ${i + 1}`;
+        $('[data-act="up"]', item.element).disabled = i === 0;
+        $('[data-act="down"]', item.element).disabled = i === items.length - 1;
+        item.input.setAttribute('aria-label', `Bullet point ${i + 1}`);
+        if (item.legend) item.legend.textContent = `Evidence photos for ${position}`;
+        if (item.addPhotoBtn) item.addPhotoBtn.disabled = item.slots.length >= maxPhotos;
+        item.slots.forEach((slot, p) =>
+          slot.relabel(item.slots.length > 1 ? `photo ${p + 1} of ${position}` : `photo of ${position}`)
+        );
       });
-      addBtn.disabled = rows.length >= maxItems;
+      addBtn.disabled = items.length >= maxItems;
     };
 
-    const addRow = (text = '') => {
-      const input = h('input', { class: 'input', type: 'text', value: text, maxlength: String(itemMax), placeholder: 'e.g. Help produce Cyber Talk.' });
-      const row = h('li', { class: 'bullets-editor__row' });
+    const addItem = ({ id = EB.newId(), text = '', photos = [] } = {}, { focus = false } = {}) => {
+      const input = h('input', {
+        class: 'input',
+        type: 'text',
+        value: text,
+        maxlength: String(itemMax),
+        placeholder: 'e.g. Help produce Cyber Talk.'
+      });
+      const photoList = h('ul', { class: 'photo-slots', role: 'list' });
+      const item = { id, input, slots: [], element: null, photoList, addPhotoBtn: null, legend: null };
+
+      const indexOf = () => items.indexOf(item);
+
       const move = (delta, act) => {
-        const sibling = delta < 0 ? row.previousElementSibling : row.nextElementSibling;
-        if (!sibling) return;
-        if (delta < 0) sibling.before(row);
-        else sibling.after(row);
+        const from = indexOf();
+        if (!EB.moveItem(items, from, delta)) return;
+        list.replaceChildren(...items.map((entry) => entry.element)); // moves the whole object
         refresh();
         changed();
-        const btn = $(`[data-act="${act}"]`, row);
+        const btn = $(`[data-act="${act}"]`, item.element);
         (btn.disabled ? input : btn).focus();
       };
-      row.append(
+
+      const removeItem = () => {
+        // Removing the bullet would detach a running upload from isBusy() tracking.
+        if (item.slots.some((slot) => slot.isBusy())) {
+          toast('Please wait until the photo has finished uploading.', 'info');
+          return;
+        }
+        const from = indexOf();
+        items.splice(from, 1);
+        item.element.remove();
+        if (!items.length) addItem();
+        else list.replaceChildren(...items.map((entry) => entry.element));
+        refresh();
+        changed();
+        (items[Math.min(from, items.length - 1)]?.input || addBtn).focus();
+      };
+
+      const addPhoto = (photo = null, { focus: focusSlot = false } = {}) => {
+        if (item.slots.length >= maxPhotos) return null;
+        const slot = createPhotoSlot({
+          session,
+          photo,
+          captionMax,
+          onChange: changed,
+          onRemove: () => {
+            const at = item.slots.indexOf(slot);
+            if (at === -1) return;
+            item.slots.splice(at, 1);
+            slot.element.remove();
+            refresh();
+            (item.slots[Math.min(at, item.slots.length - 1)] || { focus: () => item.addPhotoBtn?.focus() }).focus();
+          }
+        });
+        item.slots.push(slot);
+        photoList.append(slot.element);
+        refresh();
+        if (focusSlot) slot.focus();
+        return slot;
+      };
+
+      const iconBtn = (act, name, label, onclick) =>
+        h('button', { type: 'button', class: `icon-btn${act === 'remove' ? ' icon-btn--danger' : ''}`, 'data-act': act, 'aria-label': label, title: label, onclick }, icon(name));
+
+      const textRow = h(
+        'div',
+        { class: 'bullets-editor__row' },
         h('span', { class: 'bullets-editor__dot', 'aria-hidden': 'true' }),
         input,
-        h('button', { type: 'button', class: 'icon-btn', 'data-act': 'up', 'aria-label': 'Move bullet point up', title: 'Move up', onclick: () => move(-1, 'up') }, icon('up')),
-        h('button', { type: 'button', class: 'icon-btn', 'data-act': 'down', 'aria-label': 'Move bullet point down', title: 'Move down', onclick: () => move(1, 'down') }, icon('down')),
-        h('button', {
-          type: 'button',
-          class: 'icon-btn icon-btn--danger',
-          'aria-label': 'Remove bullet point',
-          title: 'Remove',
-          onclick: () => {
-            const next = row.nextElementSibling || row.previousElementSibling;
-            row.remove();
-            if (!rowsOf().length) addRow();
-            refresh();
-            changed();
-            ($('input', next || list) || addBtn).focus();
-          }
-        }, icon('trash'))
+        iconBtn('up', 'up', 'Move bullet point up', () => move(-1, 'up')),
+        iconBtn('down', 'down', 'Move bullet point down', () => move(1, 'down')),
+        iconBtn('remove', 'trash', 'Remove bullet point', removeItem)
       );
-      list.append(row);
+
+      let photoBlock = null;
+      if (photosEnabled) {
+        item.legend = h('p', { class: 'bullets-editor__legend' });
+        item.addPhotoBtn = h('button', {
+          type: 'button',
+          class: 'text-btn',
+          onclick: () => addPhoto(null, { focus: true })
+        }, icon('plus'), 'Add photo');
+        photoBlock = h('div', { class: 'bullets-editor__photos' }, item.legend, photoList, item.addPhotoBtn);
+      }
+
+      item.element = h('li', { class: 'bullets-editor__item', dataset: { bulletId: id } }, textRow, photoBlock);
+      items.push(item);
+      list.append(item.element);
+      if (photosEnabled) photos.forEach((photo) => addPhoto(photo));
       refresh();
-      return row;
+      if (focus) input.focus();
+      return item;
     };
 
     addBtn.addEventListener('click', () => {
-      $('input', addRow())?.focus();
+      addItem({}, { focus: true });
       changed();
     });
 
-    const initial = (Array.isArray(value) ? value : []).filter((v) => typeof v === 'string').slice(0, maxItems);
-    (initial.length ? initial : ['']).forEach((text) => addRow(text));
+    // bullet_items when the column is there, otherwise the legacy bullets strings
+    const initial = EB.itemsFromRow({ bullet_items: value, bullets: values.bullets }, { maxItems, maxPhotos });
+    if (initial.length) initial.forEach((item) => addItem(item));
+    else addItem();
 
-    const collect = () => rowsOf().map((row) => sanitizeText($('input', row).value));
+    const collect = () =>
+      items.map((item) => ({
+        id: item.id,
+        text: item.input.value,
+        photos: item.slots.map((slot) => slot.read()).filter(Boolean)
+      }));
 
     return {
-      element: h('div', { class: 'bullets-editor' }, list, addBtn),
-      focusTarget: () => $('input', list) || addBtn,
-      raw: collect,
+      element: h('div', { class: `bullets-editor${photosEnabled ? '' : ' bullets-editor--no-photos'}` }, list, addBtn),
+      focusTarget: () => items[0]?.input || addBtn,
+      raw: () => items.map((item) => `${item.id}|${item.input.value}|${item.slots.map((slot) => slot.raw()).join('~')}`),
+      isBusy: () => items.some((item) => item.slots.some((slot) => slot.isBusy())),
       read() {
-        const items = collect().filter(Boolean);
-        const tooLong = items.findIndex((text) => text.length > itemMax);
-        if (tooLong !== -1) return { error: `Bullet point ${tooLong + 1} is too long (max ${itemMax} characters).` };
-        if (items.length > maxItems) return { error: `You can add at most ${maxItems} bullet points.` };
-        return { value: items };
+        if (this.isBusy()) return { error: 'An evidence photo is still uploading. Please wait for it to finish.' };
+        const result = EB.validateItems(collect(), { maxItems, maxText: itemMax, maxPhotos, maxCaption: captionMax });
+        return result.ok ? { value: result.items } : { error: result.error };
+      },
+      /** After a successful save: delete photos that are gone and no longer referenced. */
+      async commit() {
+        const kept = items.flatMap((item) => item.slots.map((slot) => slot.url())).filter(Boolean);
+        await session.commit(kept);
+        items.forEach((item) => item.slots.forEach((slot) => slot.markSaved()));
+      },
+      /** Cancel / discard: delete only the uploads that were never saved. */
+      async rollback() {
+        await session.rollback();
       }
     };
   }
@@ -1034,8 +1417,8 @@
       control = createUploadField(field, value, values);
     } else if (field.type === 'stats') {
       control = createStatsField(field, value);
-    } else if (field.type === 'bullets') {
-      control = createBulletsField(field, value);
+    } else if (field.type === 'bulletItems') {
+      control = createBulletItemsField(field, value, values);
     } else {
       if (field.type === 'textarea') {
         input = h('textarea', { class: 'input input--area', id, rows: String(field.rows || 4) });
@@ -1637,14 +2020,28 @@
       emptyIcon: 'briefcase',
       fileFields: ['logo_url'],
       sort: byOrderThenStart,
-      defaults: { is_current: false, show_months: true, bullets: [] },
+      defaults: { is_current: false, show_months: true, bullets: [], bullet_items: [] },
+      /** Evidence photos need the 2026-10-12 column; without it the editor stays text-only. */
+      capabilities: async () => ({ hasBulletItems: await api.hasColumn('experience', 'bullet_items') }),
+      notice: ({ hasBulletItems }) =>
+        hasBulletItems
+          ? null
+          : `Evidence photos for bullet points need one more migration. Run ${BULLET_MIGRATION_FILE} in the Supabase SQL Editor (see SETUP.md, step 3c), then reload. Until then you can still edit the bullet text.`,
+      /** Logo + every evidence photo of this entry. */
+      filesOf: (row) => EB.rowFileUrls(row, ['logo_url']),
+      /** Don't delete a storage object another entry still points at. */
+      stillReferenced: (url, otherRows) => EB.countUrlRefs(otherRows, url, { fields: ['logo_url'] }) > 0,
       titleOf: (row) => row.organization,
-      subOf: (row) => [
-        row.role,
-        periodText(formatMonth(row.start_date, row.show_months !== false), row.is_current ? 'Present' : formatMonth(row.end_date, row.show_months !== false))
-      ].filter(Boolean).join(' · '),
+      subOf: (row) => {
+        const photos = EB.photoUrlsOfItems(row.bullet_items).length;
+        return [
+          row.role,
+          periodText(formatMonth(row.start_date, row.show_months !== false), row.is_current ? 'Present' : formatMonth(row.end_date, row.show_months !== false)),
+          photos ? plural(photos, 'evidence photo') : ''
+        ].filter(Boolean).join(' · ');
+      },
       thumbOf: (row) => ({ src: row.logo_url, glyph: 'briefcase' }),
-      fields: () => [
+      fields: ({ hasBulletItems = true, isReferenced = null } = {}) => [
         { name: 'organization', label: 'Organization', type: 'text', max: LIMITS.experience.organization, required: true, full: true,
           placeholder: 'e.g. BINUS Cyber Security Community' },
         { name: 'role', label: 'Role', type: 'text', max: LIMITS.experience.role, placeholder: 'e.g. Media and Publication Activist' },
@@ -1655,18 +2052,27 @@
         { name: 'is_current', label: 'I\u2019m currently here (shows \u201cPresent\u201d)', type: 'checkbox', disables: 'end_date' },
         { name: 'show_months', label: 'Show months (untick to show years only)', type: 'checkbox', defaultChecked: true },
         { type: 'heading', label: 'Details' },
-        { name: 'bullets', label: 'Bullet points', type: 'bullets', full: true,
+        { name: 'bullet_items', label: 'Bullet points', type: 'bulletItems', full: true,
           maxItems: LIMITS.experience.bullets, itemMax: LIMITS.experience.bullet,
-          hint: `2\u20134 short lines work best (max ${LIMITS.experience.bullets}). Use the arrows to reorder. Empty lines are ignored.` },
+          maxPhotos: LIMITS.experience.photos, captionMax: LIMITS.experience.caption,
+          photos: hasBulletItems, isReferenced,
+          hint: hasBulletItems
+            ? `2\u20134 short lines work best (max ${LIMITS.experience.bullets}). Use the arrows to reorder \u2014 a bullet keeps its own photos. Each bullet can carry up to ${LIMITS.experience.photos} optional evidence photos (JPG, PNG or WebP, max 5 MB); visitors see them as small thumbnails under that bullet and can open them full size. Empty lines are ignored.`
+            : `2\u20134 short lines work best (max ${LIMITS.experience.bullets}). Use the arrows to reorder. Empty lines are ignored.` },
         { name: 'logo_url', label: 'Logo', type: 'upload', kind: 'image', full: true,
           hint: 'Optional. A square logo looks best (shown on a white tile). Without a logo the card shows the organization\u2019s initials.' },
         { name: 'is_visible', label: 'Visible on the site', type: 'switch', full: true }
       ],
-      prepare(data) {
+      prepare(data, { hasBulletItems = true } = {}) {
         if (data.is_current) data.end_date = null;
         if (data.start_date && data.end_date && data.end_date < data.start_date) {
           throw new Error('The end date is before the start date. Please check the period.');
         }
+        // An explicit, successful save writes the new column AND the legacy strings.
+        const { bullet_items, bullets } = EB.serialize(data.bullet_items);
+        data.bullets = bullets;
+        if (hasBulletItems) data.bullet_items = bullet_items;
+        else delete data.bullet_items; // column not there yet → text only, nothing is lost
         return data;
       }
     },
@@ -1765,8 +2171,9 @@
 
     let rows;
     let local;
+    let caps = {};
     try {
-      [rows, local] = await Promise.all([api.list(table), localData()]);
+      [rows, local, caps] = await Promise.all([api.list(table), localData(), cfg.capabilities ? cfg.capabilities() : {}]);
     } catch (error) {
       errorState(error, () => renderListView(table));
       return;
@@ -1774,8 +2181,25 @@
     const sortRows = cfg.sort || bySortOrder;
     rows.sort(sortRows);
 
+    const noticeText = cfg.notice ? cfg.notice(caps) : null;
+    const notice = noticeText ? h('p', { class: 'notice' }, noticeText) : null;
     const container = h('div', { class: 'list-view' });
     let busy = false;
+
+    /**
+     * Is this storage object still used by another entry of this table? Asked before a
+     * replaced or removed file is deleted, so two bullets (or two entries) pointing at
+     * the same photo can't delete it from under each other. Unknown → keep the file.
+     */
+    const isReferenced = async (url, excludeId) => {
+      if (!cfg.stillReferenced) return false;
+      try {
+        return cfg.stillReferenced(url, (await api.list(table)).filter((r) => String(r.id) !== String(excludeId)));
+      } catch (error) {
+        console.warn('Could not check other references', error);
+        return true;
+      }
+    };
 
     // Group rows (skills by category, ordered like the public site)
     const groupsOf = () => {
@@ -1864,7 +2288,8 @@
     };
 
     const remove = async (row) => {
-      const files = cfg.fileFields.map((f) => row[f]).filter((url) => pathFromUrl(url));
+      const filesOf = cfg.filesOf || ((r) => cfg.fileFields.map((f) => r[f]));
+      const files = [...new Set(filesOf(row).filter((url) => pathFromUrl(url)))];
       const answer = await ask({
         title: `Delete “${cfg.titleOf(row)}”?`,
         message: `This ${cfg.noun} will be removed from the site. This can't be undone.`,
@@ -1878,9 +2303,15 @@
         await api.remove(table, row.id);
         rows = rows.filter((r) => r.id !== row.id);
         if (answer.checked) {
-          const results = await Promise.allSettled(files.map(removeStorageUrl));
+          // A photo another entry still points at is kept rather than deleted.
+          const shared = cfg.stillReferenced ? files.filter((url) => cfg.stillReferenced(url, rows)) : [];
+          const removable = files.filter((url) => !shared.includes(url));
+          const results = await Promise.allSettled(removable.map(removeStorageUrl));
           if (results.some((r) => r.status === 'rejected')) {
             toast('Deleted, but some files could not be removed. Check the Files page.', 'error');
+          }
+          if (shared.length) {
+            toast(`${plural(shared.length, 'file')} kept because ${shared.length === 1 ? 'it is' : 'they are'} still used by another entry.`, 'info');
           }
         }
         toast(`“${cfg.titleOf(row)}” deleted.`);
@@ -1894,12 +2325,14 @@
       const values = row
         ? { ...row }
         : { is_visible: true, category: table === 'projects' ? 'code' : firstGroup || '', ...(cfg.defaults || {}) };
+      // Context for the field builder: database capabilities + the shared-file guard.
+      const ctx = { ...caps, isReferenced: (url) => isReferenced(url, row?.id) };
       editor.open({
         title: isNew ? `Add ${cfg.noun}` : `Edit ${cfg.noun}`,
-        fields: cfg.fields(),
+        fields: cfg.fields(ctx),
         values,
         onSave: async (data) => {
-          if (cfg.prepare) data = cfg.prepare(data);
+          if (cfg.prepare) data = cfg.prepare(data, ctx);
           if (cfg.categoryNames && typeof data.category === 'string') data.category = canonicalCategory(data.category);
           if (isNew) {
             data.sort_order = nextOrder(cfg.group ? data.category : null);
@@ -1981,7 +2414,7 @@
 
     addBtn.addEventListener('click', () => openEditor());
     draw();
-    root().replaceChildren(container);
+    root().replaceChildren(...[notice, container].filter(Boolean));
   }
 
   // ---- Files ----
@@ -2035,12 +2468,35 @@
       note(r.doc_url, { table: 'projects', id: r.id, field: 'doc_url', label: `Project “${r.title}” document` });
     });
     certificates.forEach((r) => note(r.image_url, { table: 'certificates', id: r.id, field: 'image_url', label: `Certificate “${r.title}” image` }));
-    experience.forEach((r) => note(r.logo_url, { table: 'experience', id: r.id, field: 'logo_url', label: `Experience “${r.organization}” logo` }));
+    experience.forEach((r) => {
+      note(r.logo_url, { table: 'experience', id: r.id, field: 'logo_url', label: `Experience “${r.organization}” logo` });
+      // Evidence photos live inside bullet_items[].photos[] — they are real references,
+      // so they must never be counted as unused or deleted by the cleanup button.
+      EB.photoRefsOfRow(r).forEach((ref) =>
+        note(ref.url, {
+          table: 'experience',
+          id: r.id,
+          field: 'bullet_items',
+          label: `Experience “${r.organization}” bullet ${ref.itemIndex + 1} photo ${ref.photoIndex + 1}`,
+          /** Clearing a nested reference rewrites bullet_items without that photo. */
+          clear: async () => {
+            const fresh = await run(sb.from('experience').select('bullet_items').eq('id', r.id).maybeSingle());
+            const { bullet_items, removed } = EB.removePhotoUrl(fresh?.bullet_items, ref.url);
+            if (removed) await api.update('experience', r.id, { bullet_items });
+          }
+        })
+      );
+    });
     education.forEach((r) => note(r.logo_url, { table: 'education', id: r.id, field: 'logo_url', label: `Education “${r.institution}” logo` }));
 
     const clearRefs = async (refs) => {
+      const done = new Set(); // one rewrite per row+column, even with several photos in it
       for (const ref of refs) {
-        await api.update(ref.table, ref.id, { [ref.field]: null });
+        const key = `${ref.table}:${ref.id}:${ref.field}`;
+        if (done.has(key)) continue;
+        done.add(key);
+        if (ref.clear) await ref.clear();
+        else await api.update(ref.table, ref.id, { [ref.field]: null });
       }
     };
 
@@ -2342,6 +2798,12 @@
     if (typeof window.supabase?.createClient !== 'function') {
       $('#config-message').textContent =
         "The Supabase library couldn't be loaded. Check your internet connection or disable content blockers for this page, then reload.";
+      show('config-view');
+      return;
+    }
+    if (!EB) {
+      $('#config-message').textContent =
+        "experience-bullets.js couldn't be loaded. Make sure the file sits next to admin.html, then reload this page.";
       show('config-view');
       return;
     }
