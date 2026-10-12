@@ -69,6 +69,58 @@ create table if not exists public.skills (
   is_visible  boolean not null default true
 );
 
+-- Shape check for projects.external_links (the project's "Additional links").
+-- A CHECK constraint cannot contain a sub-select, so the shape is validated by this
+-- immutable helper. It is identical to the copy in
+-- supabase/migrations/20261012_project_custom_links.sql, which adds the column to
+-- databases created before 2026-10-12 (tests/static-checks.test.mjs compares them).
+create or replace function public.project_external_links_valid(links jsonb)
+returns boolean
+language sql
+immutable
+parallel safe
+set search_path = ''
+as $fn$
+  -- Nested CASE expressions on purpose: PostgreSQL does not promise that AND / OR
+  -- short-circuit, so the type of a value is always settled BEFORE a function that
+  -- would raise on the wrong type (jsonb_array_length, jsonb_array_elements,
+  -- jsonb_object_keys) is used. Every predicate is coalesce()d, so a missing key
+  -- means "invalid", never NULL (a NULL CHECK result would count as a pass).
+  select case
+    when links is null or jsonb_typeof(links) <> 'array' then false
+    else
+          jsonb_array_length(links) <= 8
+      and octet_length(links::text) <= 32000
+      -- every link has its own id
+      and (select count(distinct link ->> 'id') from jsonb_array_elements(links) as link)
+          = jsonb_array_length(links)
+      and not exists (
+        select 1
+        from jsonb_array_elements(links) as link
+        where not coalesce(
+          case
+            when jsonb_typeof(link) <> 'object' then false
+            else
+              -- { id, label, url, description? } and nothing else
+                  (select count(*) from jsonb_object_keys(link) as key_name
+                    where key_name not in ('id', 'label', 'url', 'description')) = 0
+              and coalesce(jsonb_typeof(link -> 'id'), '') = 'string'
+              and char_length(link ->> 'id') between 1 and 64
+              and (link ->> 'id') ~ '^[A-Za-z0-9_-]+$'
+              and coalesce(jsonb_typeof(link -> 'label'), '') = 'string'
+              and char_length(link ->> 'label') between 1 and 60
+              and (link ->> 'label') ~ '[^[:space:]]'
+              -- https only (javascript:, data:, http: … are refused), same caps as the other url columns
+              and coalesce(jsonb_typeof(link -> 'url'), '') = 'string'
+              and char_length(link ->> 'url') <= 500
+              and (link ->> 'url') ~ '^https://[^[:space:]<>"''`]+$'
+              and coalesce(jsonb_typeof(link -> 'description'), 'string') = 'string'
+              and char_length(coalesce(link ->> 'description', '')) <= 160
+          end, false)
+      )
+  end;
+$fn$;
+
 create table if not exists public.projects (
   id          bigint generated always as identity primary key,
   title       text not null check (char_length(title) between 1 and 150),
@@ -82,6 +134,12 @@ create table if not exists public.projects (
   repo_url    text check (repo_url  is null or (char_length(repo_url)  <= 300 and repo_url  ~ '^https://[^[:space:]<>"''`]+$')),
   image_url   text check (image_url is null or (char_length(image_url) <= 500 and image_url ~ '^https://[^[:space:]<>"''`]+$')),
   doc_url     text check (doc_url   is null or (char_length(doc_url)   <= 500 and doc_url   ~ '^https://[^[:space:]<>"''`]+$')),
+  -- Additional links shown in the project details: [{ id, label, url, description? }], https only.
+  -- Databases created before 2026-10-12 get this column from
+  -- supabase/migrations/20261012_project_custom_links.sql (this table already exists there,
+  -- so "create table if not exists" would not add it).
+  external_links jsonb not null default '[]'::jsonb
+              constraint projects_external_links_shape check (public.project_external_links_valid(external_links)),
   sort_order  integer not null default 0 check (sort_order between 0 and 100000),
   is_visible  boolean not null default true
 );

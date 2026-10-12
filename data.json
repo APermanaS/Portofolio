@@ -52,6 +52,7 @@
       "repo_url": "https://github.com/cosmicus0/petButtler",
       "image_url": null,
       "doc_url": "assets/docs/pet-butler-presentation.pdf",
+      "external_links": [],
       "sort_order": 1
     },
     {
@@ -66,6 +67,7 @@
       "repo_url": null,
       "image_url": null,
       "doc_url": "assets/docs/software-security-threat-model.pdf",
+      "external_links": [],
       "sort_order": 2
     }
   ],

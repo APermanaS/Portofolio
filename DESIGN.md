@@ -148,3 +148,28 @@ Change Log
   without touching the text. Admin → Experience explains the migration if the column is missing and
   stays usable as a text-only editor until then. Other sections, auth, RLS, config.js and CNAME
   unchanged. Tests: node --test "tests/*.test.mjs" (mocked Supabase/Storage, no dependencies).
+- 2026-10-12 · Projects · Each project can carry up to 8 custom "Additional links" managed in the admin
+  panel: a label of your choice (the text visitors click), an https:// URL and an optional short description.
+  Data: supabase/migrations/20261012_project_custom_links.sql adds projects.external_links (jsonb, NOT NULL,
+  default [] — existing rows read as [], nothing is seeded, converted or rewritten) plus a CHECK via the
+  immutable helper project_external_links_valid (max 8 links, unique stable ids, label 1–60, https:// URL
+  ≤ 500, description ≤ 160, no other keys). Additive and idempotent; no policy, grant or storage rule touched.
+  schema.sql defines the same function and column for new installations (a test keeps both copies identical).
+  repo_url and doc_url stay separate and unchanged. New shared core project-links.js (plain script, loaded by
+  index.html and admin.html, also required by tests/): strict public read path, editor drafts, validation,
+  ordering and the saved shape. Public: the project modal gets an "Additional links" block after Repository —
+  the existing .link-chip pills, one per row, the chosen label as the link text and the description underneath
+  (linked with aria-describedby); target=_blank, rel="noopener noreferrer", "(opens in a new tab)" for screen
+  readers; database text via text nodes only; only https:// hrefs (javascript:, data:, http:, relative and
+  protocol-relative URLs are dropped, and safeUrl checks again); no block when a project has no safe link;
+  long labels wrap inside the pill. The public query asks for external_links and retries the old column list
+  when it is missing, so saved Supabase projects keep showing instead of data.json. Admin → Projects: an
+  "Additional links" editor under the document upload (Add link, edit, ↑/↓ reorder, remove; label and https URL
+  required, description optional), problems shown under the exact input, nothing rewritten while typing, so a
+  failed Save keeps every draft value; without the column the field is left out and a notice names the migration.
+  Files page counts bucket files used by an additional link as used (deleting such a file removes every link
+  to it, ?query / #fragment variants included); replacing / removing a project image or document, or deleting a
+  project with its files, keeps a file an additional link still points at (opt-in isReferenced on the upload
+  field, used by Projects only).
+  Experience, Skills, other sections, auth, RLS, config.js and CNAME unchanged. Tests: node --test
+  tests/*.test.mjs — core unit tests plus script.js and admin.js run in node:vm against a mocked Supabase.

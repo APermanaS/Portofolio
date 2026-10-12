@@ -90,6 +90,15 @@
    */
   const EB = window.ExperienceBullets || null;
 
+  /** File of the 2026-10-12 migration (projects.external_links = a project's additional links). */
+  const LINKS_MIGRATION_FILE = 'supabase/migrations/20261012_project_custom_links.sql';
+
+  /**
+   * project-links.js, loaded just before this file. Shared with the public site:
+   * reading, validating, ordering and the saved shape of a project's additional links.
+   */
+  const PL = window.ProjectLinks || null;
+
   function readConfig() {
     const cfg = window.PORTFOLIO_CONFIG || {};
     const url = String(cfg.supabaseUrl || '').trim().replace(/\/+$/, '');
@@ -451,6 +460,12 @@
     } catch {
       return null;
     }
+  }
+
+  /** Same object in our bucket? Ignores ?query / #fragment and URL-encoding differences. */
+  function sameStorageFile(a, b) {
+    const path = pathFromUrl(a);
+    return Boolean(path) && path === pathFromUrl(b);
   }
 
   async function accessToken() {
@@ -859,11 +874,18 @@
         state.sessionUploads.clear();
         clearPreview();
         if (old && old !== state.current && pathFromUrl(old)) {
-          try {
-            await removeStorageUrl(old);
-          } catch (err) {
-            console.warn(err);
-            toast('Saved, but the old file could not be deleted. You can remove it on the Files page.', 'error');
+          // Optional per field (Projects: a project's additional link may point at this file).
+          // Unknown → keep the file rather than break a link.
+          const keep = field.isReferenced ? await Promise.resolve().then(() => field.isReferenced(old)).catch(() => true) : false;
+          if (keep) {
+            toast('Saved. The old file is still used by an additional link, so it was kept in storage.', 'info');
+          } else {
+            try {
+              await removeStorageUrl(old);
+            } catch (err) {
+              console.warn(err);
+              toast('Saved, but the old file could not be deleted. You can remove it on the Files page.', 'error');
+            }
           }
         }
         if (root.isConnected) render();
@@ -886,9 +908,9 @@
                  disables (checkbox: name of the field it disables while ticked),
                  infoFields (upload: { name, date } columns with the original file name / time),
                  maxItems / itemMax / maxPhotos / captionMax / photos / isReferenced
-                   (bulletItems) }
+                   (bulletItems), maxItems (projectLinks) }
         types: text | textarea | email | url | date | month | select | switch | checkbox |
-               upload | stats | bulletItems | heading
+               upload | stats | bulletItems | projectLinks | heading
      ------------------------------------------------------------------------ */
 
   /**
@@ -1328,6 +1350,157 @@
     };
   }
 
+  /**
+   * A project's "Additional links": label + https URL + optional short description,
+   * in the order shown on the site. Value = the row's external_links.
+   *
+   * Validation, ordering and the saved shape come from project-links.js, so the admin
+   * panel, the public site and the tests agree. Problems are shown under the exact
+   * input. Nothing is rewritten while you type or when Save fails, so every draft
+   * value stays in the form for another try.
+   */
+  function createProjectLinksField(field, value, { describedBy = null } = {}) {
+    const L = PL.LIMITS;
+    const maxItems = field.maxItems || L.items;
+
+    const list = h('ol', { class: 'links-editor__list', role: 'list' });
+    const empty = h('p', { class: 'links-editor__empty' }, 'No additional links yet.');
+    const addBtn = h('button', { type: 'button', class: 'btn btn--secondary btn--small' }, icon('plus'), 'Add link');
+    const changed = () => list.dispatchEvent(new Event('input', { bubbles: true }));
+
+    /** [{ id, title, label, url, description, up, down, remove, element }] — order = display order */
+    const items = [];
+    let firstInvalid = null;
+
+    /** One labelled input with its own inline error. */
+    const part = (key, text, props, optional = false) => {
+      const id = nextId('link');
+      const errorId = `${id}-error`;
+      const error = h('p', { class: 'field__error', id: errorId, hidden: true });
+      const input = h('input', { class: 'input', id, autocomplete: 'off', 'aria-describedby': errorId, 'aria-invalid': 'false', ...props });
+      const element = h(
+        'div',
+        { class: `links-editor__part links-editor__part--${key}` },
+        h('label', { class: 'links-editor__label', for: id }, text, h('span', { class: 'field__req' }, optional ? 'Optional' : 'Required')),
+        input,
+        error
+      );
+      const setError = (message) => {
+        error.textContent = message || '';
+        error.hidden = !message;
+        input.setAttribute('aria-invalid', message ? 'true' : 'false');
+        element.classList.toggle('has-error', Boolean(message));
+      };
+      input.addEventListener('input', () => {
+        if (!error.hidden) setError('');
+      });
+      return { input, setError, element };
+    };
+
+    const refresh = () => {
+      items.forEach((item, i) => {
+        const n = i + 1;
+        item.title.textContent = `Link ${n}`;
+        item.up.disabled = i === 0;
+        item.down.disabled = i === items.length - 1;
+        [[item.up, `Move link ${n} up`], [item.down, `Move link ${n} down`], [item.remove, `Remove link ${n}`]].forEach(([btn, label]) => {
+          btn.setAttribute('aria-label', label);
+          btn.setAttribute('title', label);
+        });
+      });
+      empty.hidden = items.length > 0;
+      list.hidden = items.length === 0;
+      addBtn.disabled = items.length >= maxItems;
+    };
+
+    const move = (item, delta, act) => {
+      if (!PL.moveLink(items, items.indexOf(item), delta)) return;
+      list.replaceChildren(...items.map((entry) => entry.element)); // the whole link moves
+      refresh();
+      changed();
+      const btn = act === 'up' ? item.up : item.down;
+      (btn.disabled ? item.label.input : btn).focus();
+    };
+
+    const removeItem = (item) => {
+      const from = items.indexOf(item);
+      if (from === -1) return;
+      items.splice(from, 1);
+      item.element.remove();
+      refresh();
+      changed();
+      (items[Math.min(from, items.length - 1)]?.label.input || addBtn).focus();
+    };
+
+    const addItem = ({ id = PL.newId(), label = '', url = '', description = '' } = {}, { focus = false } = {}) => {
+      const titleId = nextId('link-title');
+      const iconBtn = (act, name, onclick) =>
+        h('button', { type: 'button', class: `icon-btn${act === 'remove' ? ' icon-btn--danger' : ''}`, 'data-act': act, onclick }, icon(name));
+      const item = {
+        id,
+        title: h('p', { class: 'links-editor__title', id: titleId }),
+        label: part('label', 'Label', { type: 'text', value: label, maxlength: String(L.label), placeholder: 'e.g. Live demo' }),
+        url: part('url', 'URL', { type: 'url', value: url, maxlength: String(L.url), inputmode: 'url', spellcheck: 'false', placeholder: 'https://…' }),
+        description: part('description', 'Short description', {
+          type: 'text', value: description, maxlength: String(L.description), placeholder: 'Shown under the link'
+        }, true)
+      };
+      item.up = iconBtn('up', 'up', () => move(item, -1, 'up'));
+      item.down = iconBtn('down', 'down', () => move(item, 1, 'down'));
+      item.remove = iconBtn('remove', 'trash', () => removeItem(item));
+      item.element = h(
+        'li',
+        { class: 'links-editor__item', dataset: { linkId: id } },
+        h(
+          'div',
+          { class: 'links-editor__group', role: 'group', 'aria-labelledby': titleId },
+          h('div', { class: 'links-editor__head' }, item.title, h('div', { class: 'links-editor__actions' }, item.up, item.down, item.remove)),
+          h('div', { class: 'links-editor__grid' }, item.label.element, item.url.element, item.description.element)
+        )
+      );
+      items.push(item);
+      list.append(item.element);
+      refresh();
+      if (focus) item.label.input.focus();
+      return item;
+    };
+
+    addBtn.addEventListener('click', () => {
+      addItem({}, { focus: true });
+      changed();
+    });
+
+    PL.toDrafts(value).forEach((link) => addItem(link));
+    refresh();
+
+    const collect = () =>
+      items.map((item) => ({
+        id: item.id,
+        label: item.label.input.value,
+        url: item.url.input.value,
+        description: item.description.input.value
+      }));
+
+    return {
+      element: h('div', { class: 'links-editor', role: 'group', 'aria-label': field.label, 'aria-describedby': describedBy }, empty, list, addBtn),
+      focusTarget: () => firstInvalid || items[0]?.label.input || addBtn,
+      raw: () => collect().map((link) => [link.id, link.label, link.url, link.description]),
+      read() {
+        firstInvalid = null;
+        items.forEach((item) => [item.label, item.url, item.description].forEach((p) => p.setError('')));
+        const result = PL.validateLinks(collect(), { maxItems });
+        if (result.ok) return { value: result.links };
+        result.errors.forEach(({ index, field: key, message }) => {
+          const target = items[index]?.[key];
+          if (!target) return;
+          target.setError(message);
+          firstInvalid ??= target.input;
+        });
+        return { error: result.error };
+      }
+    };
+  }
+
   function createStatsField(field, value) {
     const L = LIMITS.stats;
     const list = h('div', { class: 'stats-editor__list' });
@@ -1419,6 +1592,8 @@
       control = createStatsField(field, value);
     } else if (field.type === 'bulletItems') {
       control = createBulletItemsField(field, value, values);
+    } else if (field.type === 'projectLinks') {
+      control = createProjectLinksField(field, value, { describedBy: field.hint ? hintId : null });
     } else {
       if (field.type === 'textarea') {
         input = h('textarea', { class: 'input input--area', id, rows: String(field.rows || 4) });
@@ -1991,10 +2166,22 @@
       sub: 'Cards in the Projects section. The first “Code” project is shown first.',
       noun: 'project',
       fileFields: ['image_url', 'doc_url'],
+      defaults: { external_links: [] },
+      /** Additional links need the 2026-10-12 column; without it the field is left out (nothing is lost). */
+      capabilities: async () => ({ hasExternalLinks: await api.hasColumn('projects', 'external_links') }),
+      /**
+       * A project's additional link may point at an uploaded file (e.g. pasted from Files → Copy link).
+       * Such a file is kept when an image / document is replaced or a project is deleted.
+       */
+      stillReferenced: (url, rows) => rows.some((r) => PL.linkRefs(r.external_links).some((ref) => sameStorageFile(ref.url, url))),
+      notice: ({ hasExternalLinks }) =>
+        hasExternalLinks
+          ? null
+          : `Additional links for projects need one more migration. Run ${LINKS_MIGRATION_FILE} in the Supabase SQL Editor (see SETUP.md, step 3d), then reload. Until then everything else works as before.`,
       titleOf: (row) => row.title,
       subOf: (row) => [row.category === 'document' ? 'Document' : 'Code', row.period].filter(Boolean).join(' · '),
       thumbOf: (row) => ({ src: row.image_url, glyph: row.category === 'document' ? 'pdf' : 'folder' }),
-      fields: () => [
+      fields: ({ hasExternalLinks = true, isReferencedAnywhere = null } = {}) => [
         { name: 'title', label: 'Title', type: 'text', max: LIMITS.projects.title, required: true, full: true },
         { name: 'category', label: 'Type', type: 'select', options: [{ value: 'code', label: 'Code' }, { value: 'document', label: 'Document' }] },
         { name: 'period', label: 'Period', type: 'text', max: LIMITS.projects.period, placeholder: 'e.g. March–June 2026' },
@@ -2006,10 +2193,22 @@
         { name: 'tools', label: 'Tools and methods', type: 'textarea', rows: 3, max: LIMITS.projects.tools, full: true },
         { name: 'result', label: 'Result / impact', type: 'textarea', rows: 3, max: LIMITS.projects.result, full: true },
         { name: 'repo_url', label: 'Repository URL', type: 'url', max: LIMITS.projects.repo_url, full: true, placeholder: 'https://github.com/…' },
-        { name: 'image_url', label: 'Project image', type: 'upload', kind: 'image', hint: 'Cover image, ideally 16:10.' },
-        { name: 'doc_url', label: 'Project document', type: 'upload', kind: 'pdf', hint: 'Shown as “View document (PDF)”.' },
+        { name: 'image_url', label: 'Project image', type: 'upload', kind: 'image', hint: 'Cover image, ideally 16:10.',
+          isReferenced: isReferencedAnywhere },
+        { name: 'doc_url', label: 'Project document', type: 'upload', kind: 'pdf', hint: 'Shown as “View document (PDF)”.',
+          isReferenced: isReferencedAnywhere },
+        ...(hasExternalLinks
+          ? [{ name: 'external_links', label: 'Additional links', type: 'projectLinks', full: true, maxItems: PL.LIMITS.items,
+               hint: `Optional, up to ${PL.LIMITS.items}. Shown in the project details under \u201cAdditional links\u201d, in this order (use the arrows to reorder). Each link needs a label \u2014 the text visitors click \u2014 and a full https:// URL; the short description is optional. The repository and document fields above stay as they are.` }]
+          : []),
         { name: 'is_visible', label: 'Visible on the site', type: 'switch', full: true }
-      ]
+      ],
+      prepare(data, { hasExternalLinks = true } = {}) {
+        // Column there → write the validated links (in editor order); otherwise leave it out entirely.
+        if (hasExternalLinks && Array.isArray(data.external_links)) data.external_links = PL.serialize(data.external_links);
+        else delete data.external_links;
+        return data;
+      }
     },
     experience: {
       title: 'Experience',
@@ -2325,8 +2524,9 @@
       const values = row
         ? { ...row }
         : { is_visible: true, category: table === 'projects' ? 'code' : firstGroup || '', ...(cfg.defaults || {}) };
-      // Context for the field builder: database capabilities + the shared-file guard.
-      const ctx = { ...caps, isReferenced: (url) => isReferenced(url, row?.id) };
+      // Context for the field builder: database capabilities + the shared-file guards
+      // (isReferenced: by another entry; isReferencedAnywhere: by any entry incl. this one, after saving).
+      const ctx = { ...caps, isReferenced: (url) => isReferenced(url, row?.id), isReferencedAnywhere: (url) => isReferenced(url, null) };
       editor.open({
         title: isNew ? `Add ${cfg.noun}` : `Edit ${cfg.noun}`,
         fields: cfg.fields(ctx),
@@ -2466,6 +2666,22 @@
     projects.forEach((r) => {
       note(r.image_url, { table: 'projects', id: r.id, field: 'image_url', label: `Project “${r.title}” image` });
       note(r.doc_url, { table: 'projects', id: r.id, field: 'doc_url', label: `Project “${r.title}” document` });
+      // An additional link can point at a file in this bucket (e.g. pasted from "Copy link").
+      // That file is in use, so it must never be counted as unused by the cleanup button.
+      PL.linkRefs(r.external_links).forEach((ref) =>
+        note(ref.url, {
+          table: 'projects',
+          id: r.id,
+          field: 'external_links',
+          label: `Project “${r.title}” link “${ref.label || `link ${ref.index + 1}`}”`,
+          /** Deleting the file removes every link to it (also …#page=2 variants); other links stay. */
+          clear: async () => {
+            const fresh = await run(sb.from('projects').select('external_links').eq('id', r.id).maybeSingle());
+            const { external_links, removed } = PL.removeUrl(fresh?.external_links, (url) => sameStorageFile(url, ref.url));
+            if (removed) await api.update('projects', r.id, { external_links });
+          }
+        })
+      );
     });
     certificates.forEach((r) => note(r.image_url, { table: 'certificates', id: r.id, field: 'image_url', label: `Certificate “${r.title}” image` }));
     experience.forEach((r) => {
@@ -2502,10 +2718,17 @@
 
     const deleteFile = async (file) => {
       const refs = usage.get(file.path) || [];
+      const fieldRefs = refs.filter((r) => r.field !== 'external_links');
+      const removesLinks = fieldRefs.length < refs.length;
       const answer = await ask({
         title: 'Delete this file?',
         message: refs.length
-          ? [`It is used by: ${refs.map((r) => r.label).join(', ')}.`, 'Those fields will be cleared and the site will show a placeholder instead. This can\u2019t be undone.']
+          ? [
+              `It is used by: ${refs.map((r) => r.label).join(', ')}.`,
+              fieldRefs.length
+                ? `Those fields will be cleared and the site will show a placeholder instead.${removesLinks ? ' Additional links to it will be removed.' : ''} This can\u2019t be undone.`
+                : 'Those additional links will be removed from their project. This can\u2019t be undone.'
+            ]
           : 'The file will be permanently deleted from storage. This can\u2019t be undone.',
         okLabel: 'Delete file'
       });
@@ -2804,6 +3027,12 @@
     if (!EB) {
       $('#config-message').textContent =
         "experience-bullets.js couldn't be loaded. Make sure the file sits next to admin.html, then reload this page.";
+      show('config-view');
+      return;
+    }
+    if (!PL) {
+      $('#config-message').textContent =
+        "project-links.js couldn't be loaded. Make sure the file sits next to admin.html, then reload this page.";
       show('config-view');
       return;
     }
