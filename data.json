@@ -80,6 +80,7 @@
       "is_current": false,
       "show_months": true,
       "bullets": ["Help produce Cyber Talk."],
+      "bullet_items": null,
       "logo_url": null,
       "sort_order": 1
     }

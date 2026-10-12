@@ -69,6 +69,29 @@ It is safe to run again. It never duplicates rows or overwrites edits you made i
 
 > Until this file has run, the public site keeps working: Experience and Education fall back to `data.json`, and certificates load without the new fields. The admin pages **Experience**, **Education** and **Sections** ask you to run the migration.
 
+## 3c. Run the bullet-point evidence photos migration
+
+Every project needs this once too, both new ones and ones set up earlier. Run it **after** step 3b.
+
+File: **`supabase/migrations/20261012_experience_bullet_photos.sql`**
+
+1. There is **nothing to find & replace** in this file. It adds no policies and needs no User UID.
+2. In Supabase, go to **SQL Editor → New query**, paste the whole file and click **Run**.
+   - Expected result: *Success. No rows returned.*
+3. Check **Table Editor → experience**: there is a new column `bullet_items`, and it is `NULL` on every existing row. That is correct — nothing was converted.
+
+What the file does:
+
+- Adds the nullable column `experience.bullet_items` (`jsonb`). Each element is one bullet point: `{ "id": …, "text": …, "photos": [ { "url": …, "caption": … } ] }`. The photos belong to the bullet *object*, so reordering a bullet in the admin panel moves its photos with it.
+- Adds a `CHECK` constraint (through the immutable helper function `public.experience_bullet_items_valid`) that mirrors the admin form limits: at most 8 bullets, 300 characters each, at most 4 photos per bullet, `https://` links only, captions up to 160 characters.
+- Leaves the existing `bullets` column exactly as it is. The admin panel writes **both** columns whenever you save an entry, so anything that reads only `bullets` keeps working.
+- Seeds, converts and overwrites **nothing**. `bullet_items` stays `NULL` until you press **Save** on that entry: `NULL` means "read the old `bullets` text", and an empty list `[]` means "this entry has no bullet points on purpose".
+- Changes no RLS policy, no grant and no storage rule. Evidence photos reuse the existing `portfolio-assets` bucket (`images/`, no SVG), so the policies from `schema.sql` already cover them.
+
+It is safe to run again.
+
+> Until this file has run, everything keeps working: the public site retries its query without the new column and still shows your saved Supabase content, and **Admin → Experience** says so and lets you edit the bullet text as before (without photos).
+
 ## 4. Fill in `config.js`
 
 1. In Supabase, open **Project Settings → API Keys** (on some dashboards it is **Settings → API**).
@@ -135,6 +158,8 @@ Checklist:
 | *You don't have permission to make this change* | `ADMIN_UUID_HERE` was not replaced with **your** User UID. Re-run the fixed `schema.sql`. |
 | *A database table is missing* | Run `schema.sql`, then `supabase/migrations/20261011130000_experience_education.sql` (step 3b). |
 | *The database is missing new columns* | Run `supabase/migrations/20261011130000_experience_education.sql` (step 3b), then reload the admin page. |
+| Admin → Experience says *Evidence photos … need one more migration* | Run `supabase/migrations/20261012_experience_bullet_photos.sql` (step 3c), then reload the admin page. |
+| Evidence photos don't show on the public site | Make sure `experience-bullets.js` is deployed next to `index.html`, and that step 3c has run. Check the browser console for `Supabase:` warnings. |
 | *permission denied for table experience / education* | The grants are missing. Re-run the migration from step 3b. |
 | *permission denied for table …* in the browser console | The grants are missing. Re-run `schema.sql`. |
 | Public site still shows old text | It uses `data.json` whenever a table is empty or Supabase can't be reached. Check the browser console for `Supabase:` warnings. |

@@ -64,6 +64,9 @@ create table if not exists public.experience (
   end_date     date,
   is_current   boolean not null default false,
   show_months  boolean not null default true,
+  -- Plain bullet text. Still written on every save. The richer bullet_items
+  -- column (bullet text + optional evidence photos) is added afterwards by
+  -- supabase/migrations/20261012_experience_bullet_photos.sql — run that file too.
   bullets      jsonb not null default '[]'::jsonb
                check (case when jsonb_typeof(bullets) = 'array'
                            then jsonb_array_length(bullets) <= 8 and octet_length(bullets::text) <= 4000
