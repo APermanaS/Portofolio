@@ -1240,18 +1240,19 @@
         'aria-label': `View evidence photo${position} larger: ${caption || text}`
       });
       const img = h('img', { class: 'xp-evidence__img', alt: caption ? '' : alt, width: 320, height: 240, loading: 'lazy', decoding: 'async' });
-      const item = h(
-        'li',
-        { class: 'xp-evidence__item' },
-        h(
-          'figure',
-          { class: 'xp-evidence__figure' },
-          button,
-          caption ? h('figcaption', { class: 'xp-evidence__caption' }, caption) : null
-        )
-      );
+      const item = h('li', { class: `xp-evidence__item${caption ? ' has-caption' : ''}` }, button);
 
-      button.append(img, h('span', { class: 'xp-evidence__zoom', 'aria-hidden': 'true' }, icon('expand')));
+      // The caption is a one-line overlay INSIDE the button, revealed on hover and on
+      // keyboard focus. It is aria-hidden because the button's aria-label already carries
+      // the caption, and it only exists for a non-empty caption, so an empty caption
+      // reserves no space. The full caption still goes to the gallery modal below.
+      button.append(
+        ...[
+          img,
+          h('span', { class: 'xp-evidence__zoom', 'aria-hidden': 'true' }, icon('expand')),
+          caption ? h('span', { class: 'xp-evidence__caption', 'aria-hidden': 'true' }, caption) : null
+        ].filter(Boolean)
+      );
       button.addEventListener('click', () =>
         openImageModal(modal, { src, alt, caption: [caption || text, organization].filter(Boolean).join(' — ') }, button)
       );
@@ -1320,10 +1321,28 @@
     );
   }
 
+  /**
+   * Where a bullet's evidence photos sit, read from data-photo-layout on the
+   * Experience <section>:
+   *   "side"  (default) → ≥768px: text left, photos right, tops aligned
+   *   "below"           → photos always under their own bullet text
+   * Below 768px both variants stack the photos under the text. An unknown or
+   * missing value falls back to "side"; the CSS treats "anything but below" as
+   * side as well, so the no-JS fallback markup still looks right.
+   */
+  const PHOTO_LAYOUTS = new Set(['side', 'below']);
+
+  function applyPhotoLayout(section) {
+    if (!section) return;
+    const wanted = clean(section.dataset.photoLayout).toLowerCase();
+    section.dataset.photoLayout = PHOTO_LAYOUTS.has(wanted) ? wanted : 'side';
+  }
+
   /** Returns the number of entries shown (0 → the section is hidden). */
   function renderExperience({ rows }) {
     const root = $('#experience-root');
     if (!root) return 0;
+    applyPhotoLayout(root.closest('section'));
     const modal = $('#image-modal');
     const entries = (rows || [])
       .filter((row) => row?.is_visible !== false && isFilled(row?.organization))
