@@ -173,3 +173,38 @@ Change Log
   field, used by Projects only).
   Experience, Skills, other sections, auth, RLS, config.js and CNAME unchanged. Tests: node --test
   tests/*.test.mjs — core unit tests plus script.js and admin.js run in node:vm against a mocked Supabase.
+- 2026-10-14 · Organization Experience (visual revision) · Each bullet and its evidence photos now read as ONE
+  cohesive block instead of a text line with a loose strip of thumbnails underneath. Public only — script.js,
+  style.css and the one section tag in index.html; no data, admin, Supabase, migration, auth, config.js or CNAME
+  change, and the stored bullet shape { id, text, photos: [{ url, caption }] } is untouched.
+  Marker fix: .xp-card__bullets li and li::before were DESCENDANT selectors, so they also matched the nested
+  evidence <li>s and painted a second blue gradient dot (plus a 20px indent) next to every thumbnail. Both are
+  now scoped with the child combinator (.xp-card__bullets > li), so the marker belongs to the text bullets only;
+  the static no-JS fallback bullet is a plain <li> and keeps its dot.
+  Placement is switchable on the Experience <section> via data-photo-layout, "side" being the default:
+    side   → from 768px up the bullet becomes a two-column grid, grid-template-columns: minmax(0, 1fr) auto with
+             align-items: start, so the text sits left and its photos right with their tops aligned. The photo
+             column uses compact 104×78 thumbnails, wraps at two per row and is capped at
+             max-width: calc(var(--xp-thumb-w) * 2 + var(--space-1)), so the validated maximum of 4 photos can
+             never overflow the card.
+    below  → photos always stay under their own bullet text at every width.
+  Under 768px both variants are identical: the photos sit directly beneath their own bullet text, flush with the
+  text edge (inherited from the parent li's 20px indent), as one nowrap row that scrolls sideways
+  (overflow-x: auto, overscroll-behavior-x: contain) only when it does not fit. Thumbnail size is driven by
+  --xp-thumb-w / --xp-thumb-h (112×84, 132×99 ≥734px, 104×78 in the side layout).
+  script.js normalises the attribute (unknown, empty or missing → "side"; case-insensitive), and the CSS treats
+  "anything that is not below" as side, so the pre-JS fallback markup is laid out correctly too. To switch,
+  edit data-photo-layout on <section id="experience"> in index.html (or set it at runtime:
+  document.querySelector('#experience').dataset.photoLayout = 'below').
+  Captions: the narrow paragraph under each thumbnail is replaced by a one-line overlay inside the button
+  (absolute bottom bar, white-space: nowrap + text-overflow: ellipsis, gradient scrim) that fades in on hover
+  AND on keyboard focus-visible. It is aria-hidden because the button's aria-label already carries the caption,
+  and it is only created for a non-empty caption, so an empty caption adds no element and no empty space. The
+  full, untruncated caption still goes to the #image-modal figcaption. The zoom badge moved to the top-right so
+  it cannot collide with the caption bar; prefers-reduced-motion keeps the badge visible and drops the overlay's
+  slide-up while still revealing it. The old <figure>/<figcaption> wrapper per thumbnail is gone (li > button).
+  Unchanged: the shared gallery modal and its keyboard controls (Esc, close button, focus returns to the
+  thumbnail), lazy loading with the is-loaded fade, a failing photo removing only its own thumbnail, the
+  photo-to-bullet association, alt-text rules, and a bullet without photos rendering nothing extra.
+  Tests: node --test tests/*.test.mjs (93 pass, unchanged) plus an isolated node:vm run of the revision
+  (markers, overlay, modal caption, layout switch, scroll fallback, load-failure path).
